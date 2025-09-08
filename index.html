@@ -139,7 +139,7 @@
             <h2 class="text-2xl font-bold mb-4">Current Users</h2>
             <ul id="usersList" class="item-list"></ul>
         </div>
-        
+
         <!-- Fill-up & Report Section -->
         <div id="fillupSection" class="hidden section-container mt-0">
             <h2 class="text-2xl font-bold mb-4">Enter Fill-Up Details</h2>
@@ -200,7 +200,7 @@
                 userId = auth.currentUser.uid;
                 document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
                 console.log("User authenticated with ID:", userId);
-                
+
                 // Set up real-time listeners for users and trips
                 setupRealtimeListeners();
             } catch (error) {
@@ -244,7 +244,7 @@
                     const userData = doc.data();
                     const user = { id: doc.id, name: userData.name };
                     users.push(user);
-                    
+
                     // Create a checkbox for each user
                     const label = document.createElement('label');
                     label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
@@ -296,11 +296,11 @@
             const tripDestination = document.getElementById('tripDestination').value;
             const tripMiles = parseFloat(document.getElementById('tripMiles').value);
             const tripNotes = document.getElementById('tripNotes').value;
-            
+
             // Get selected user IDs from checkboxes
             const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
             const selectedUserIds = Array.from(selectedUserCheckboxes).map(checkbox => checkbox.value);
-            
+
             if (selectedUserIds.length === 0) {
                 showModal("Please select at least one responsible user.");
                 return;
@@ -352,7 +352,11 @@
                 const li = document.createElement('li');
                 li.innerHTML = `
                     <span>${user.name}</span>
-                    <button class="delete-btn" onclick="deleteUser('${user.id}')">Delete</button>
+                    const deleteBtn = document.createElement('button');
+deleteBtn.className = 'delete-btn';
+deleteBtn.textContent = 'Delete';
+deleteBtn.addEventListener('click', () => deleteUser(user.id));
+li.appendChild(deleteBtn);
                 `;
                 usersListElement.appendChild(li);
             });
@@ -377,7 +381,11 @@
                         <p class="text-sm text-gray-500">Notes: ${trip.notes || 'N/A'}</p>
                         <p class="text-sm text-gray-500">Date: ${new Date(trip.timestamp.toDate()).toLocaleString()}</p>
                     </div>
-                    <button class="delete-btn" onclick="deleteTrip('${trip.id}')">Delete</button>
+                    const deleteBtn = document.createElement('button');
+deleteBtn.className = 'delete-btn';
+deleteBtn.textContent = 'Delete';
+deleteBtn.addEventListener('click', () => deleteTrip(trip.id));
+li.appendChild(deleteBtn);
                 `;
                 tripsListElement.appendChild(li);
             });
