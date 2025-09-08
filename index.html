@@ -173,7 +173,14 @@
 
         // --- Firebase Setup ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const firebaseConfig = {
+  apiKey: "AIzaSyDWKz6O-5xir46vivUPBAse_vMSaXWKamU",
+  authDomain: "parents-vitals-data.firebaseapp.com",
+  projectId: "parents-vitals-data",
+  storageBucket: "parents-vitals-data.firebasestorage.app",
+  messagingSenderId: "34332288387",
+  appId: "1:34332288387:web:ea67be6bb564e8f402c2b6"
+};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db, auth, userId;
