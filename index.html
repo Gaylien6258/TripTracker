@@ -84,11 +84,24 @@
         .delete-btn:hover {
             background-color: #dc2626;
         }
-        /* modal layout (kept simple) */
+        /* modal layout */
         .modal-flex {
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        .report-summary {
+            background-color: #f0fdf4;
+            border: 2px solid #4ade80;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        .report-summary h3 {
+            font-weight: bold;
+            font-size: 1.25rem;
+            color: #166534;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
@@ -124,7 +137,6 @@
                     <label>Responsible Users</label>
                     <div id="tripUsersContainer" class="flex flex-wrap gap-2">
                         <!-- Checkboxes will be dynamically added here -->
-                        <p class="text-gray-500">Loading users...</p>
                     </div>
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Add Trip</button>
@@ -160,8 +172,11 @@
                     <label for="avgMpg">Average MPG</label>
                     <input type="number" step="0.1" id="avgMpg" placeholder="e.g., 25.5" required>
                 </div>
-                <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Generate Report & Archive</button>
+                <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Generate Report</button>
             </form>
+            <div id="reportContainer" class="hidden">
+                <!-- Report will be generated here -->
+            </div>
         </div>
 
     </div>
@@ -180,11 +195,13 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('debug');
 
         // --- Firebase Setup ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         let firebaseConfig = null;
         try {
             if (typeof __firebase_config !== 'undefined') {
@@ -194,15 +211,17 @@
             console.error('Failed to parse __firebase_config:', err);
             firebaseConfig = null;
         }
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db = null, auth = null, userId = null;
-        let users = []; // In-memory cache for users
-        let isAuthReady = false; // Flag to ensure DB operations only happen after auth
+        let users = [];
+        let trips = [];
 
         async function initializeFirebase() {
             if (!firebaseConfig) {
                 console.error("Firebase config is not available.");
                 showModal("Firebase is not configured. The app will not function correctly.", false);
+                setupEventListeners();
                 return;
             }
 
@@ -211,32 +230,31 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                // Use a single onAuthStateChanged listener to handle the user state change reliably.
-                onAuthStateChanged(auth, (user) => {
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                         document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
                         console.log("User authenticated with ID:", userId);
-                        isAuthReady = true;
                         setupRealtimeListeners();
                     } else {
-                        isAuthReady = false;
                         if (initialAuthToken) {
-                            signInWithCustomToken(auth, initialAuthToken).catch(err => {
+                            try {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } catch (err) {
                                 console.error("Custom token sign-in failed:", err);
-                                signInAnonymously(auth);
-                            });
+                                await signInAnonymously(auth);
+                            }
                         } else {
-                            signInAnonymously(auth);
+                            await signInAnonymously(auth);
                         }
                     }
                 });
 
-                // Set up UI event listeners that don't depend on Firestore immediately
                 setupEventListeners();
             } catch (error) {
                 console.error("Error during Firebase initialization or authentication:", error);
                 showModal("Could not connect to Firebase. Please check the console for details.", false);
+                setupEventListeners();
             }
         }
 
@@ -260,43 +278,30 @@
                 }
             });
         }
-        function showModal(message, isConfirmation = false, onConfirm = null) {
+        
+        function showModal(message, isConfirmation = false, onConfirmCallback = null) {
             const modal = document.getElementById('modal');
             const modalMessage = document.getElementById('modalMessage');
-            const modalButtons = document.getElementById('modalButtons');
+            const modalConfirmBtn = document.getElementById('modalConfirm');
+            const modalCloseBtn = document.getElementById('modalClose');
+            
             modalMessage.textContent = message;
-            
-            modalButtons.innerHTML = '';
-            
+
             if (isConfirmation) {
-                const confirmBtn = document.createElement('button');
-                confirmBtn.id = 'modalConfirm';
-                confirmBtn.className = 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors';
-                confirmBtn.textContent = 'Yes';
-                confirmBtn.onclick = () => {
-                    if (onConfirm) onConfirm();
+                modalConfirmBtn.classList.remove('hidden');
+                modalCloseBtn.textContent = 'No';
+                modalConfirmBtn.onclick = () => {
                     hideModal();
+                    if (onConfirmCallback) onConfirmCallback();
                 };
-                
-                const cancelBtn = document.createElement('button');
-                cancelBtn.id = 'modalCancel';
-                cancelBtn.className = 'bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors';
-                cancelBtn.textContent = 'No';
-                cancelBtn.onclick = hideModal;
-                
-                modalButtons.appendChild(confirmBtn);
-                modalButtons.appendChild(cancelBtn);
             } else {
-                const okBtn = document.createElement('button');
-                okBtn.id = 'modalClose';
-                okBtn.className = 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors';
-                okBtn.textContent = 'OK';
-                okBtn.onclick = hideModal;
-                modalButtons.appendChild(okBtn);
+                modalConfirmBtn.classList.add('hidden');
+                modalCloseBtn.textContent = 'OK';
+                modalCloseBtn.onclick = hideModal;
             }
             modal.classList.remove('hidden');
         }
-        
+
         function hideModal() {
             const modal = document.getElementById('modal');
             modal.classList.add('hidden');
@@ -304,26 +309,25 @@
 
         // ---------- Event listeners (single place) ----------
         function setupEventListeners() {
-            document.querySelectorAll('.tab-button').forEach(button => {
-                button.addEventListener('click', () => {
-                    const tabId = button.id.replace('Tab', '');
-                    switchTab(tabId);
-                });
-            });
+            document.getElementById('tripsTab').addEventListener('click', () => switchTab('trips'));
+            document.getElementById('usersTab').addEventListener('click', () => switchTab('users'));
+            document.getElementById('fillupTab').addEventListener('click', () => switchTab('fillup'));
+
+            document.getElementById('modalClose').addEventListener('click', hideModal);
 
             const userForm = document.getElementById('userForm');
             if (userForm) {
                 userForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    if (!isAuthReady) {
-                        showModal("Authentication not ready. Please wait a moment.");
-                        return;
-                    }
                     const userNameEl = document.getElementById('userName');
                     if (!userNameEl) return;
                     const userName = userNameEl.value.trim();
                     if (!userName) {
                         showModal('Please enter a user name.');
+                        return;
+                    }
+                    if (!db) {
+                        showModal('Not connected to Firestore. Unable to add user.');
                         return;
                     }
                     const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
@@ -344,10 +348,6 @@
             if (tripForm) {
                 tripForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    if (!isAuthReady) {
-                        showModal("Authentication not ready. Please wait a moment.");
-                        return;
-                    }
                     const destination = document.getElementById('tripDestination')?.value?.trim() || '';
                     const milesRaw = document.getElementById('tripMiles')?.value;
                     const miles = milesRaw ? parseFloat(milesRaw) : 0;
@@ -359,7 +359,10 @@
                         showModal("Please select at least one responsible user.");
                         return;
                     }
-
+                    if (!db) {
+                        showModal('Not connected to Firestore. Unable to add trip.');
+                        return;
+                    }
                     const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
                     try {
                         await addDoc(tripsCollectionRef, {
@@ -382,65 +385,43 @@
             if (fillupForm) {
                 fillupForm.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    const gasPrice = document.getElementById('gasPrice')?.value;
-                    const avgMpg = document.getElementById('avgMpg')?.value;
-                    showModal(`Report generated (placeholder)\nGas: ${gasPrice}\nMPG: ${avgMpg}`);
+                    const gasPrice = parseFloat(document.getElementById('gasPrice')?.value);
+                    const avgMpg = parseFloat(document.getElementById('avgMpg')?.value);
+
+                    if (isNaN(gasPrice) || isNaN(avgMpg) || gasPrice <= 0 || avgMpg <= 0) {
+                        showModal('Please enter valid, positive numbers for gas price and MPG.');
+                        return;
+                    }
+                    
+                    generateReport(gasPrice, avgMpg);
                 });
             }
         }
         
         // ---------- Firestore realtime listeners ----------
         function setupRealtimeListeners() {
-            if (!isAuthReady) {
-                console.warn('Authentication not ready; skipping realtime listeners.');
+            if (!db) {
+                console.warn('Firestore not initialized; skipping realtime listeners.');
                 return;
             }
 
+            // Listen for user data and update the global users array
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
             onSnapshot(usersCollectionRef, (userSnapshot) => {
-                users = [];
-                const usersContainer = document.getElementById('tripUsersContainer');
-                if (usersContainer) usersContainer.innerHTML = '';
-                
-                if (userSnapshot.empty) {
-                     if (usersContainer) usersContainer.innerHTML = '<p class="text-gray-500">No users yet. Add one in the "Users" tab.</p>';
-                }
-
-                userSnapshot.forEach(docSnap => {
-                    const data = docSnap.data() || {};
-                    const user = { id: docSnap.id, name: data.name || 'Unnamed' };
-                    users.push(user);
-                    
-                    if (usersContainer) {
-                        const label = document.createElement('label');
-                        label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
-                        const input = document.createElement('input');
-                        input.type = 'checkbox';
-                        input.name = 'tripUser';
-                        input.value = user.id;
-                        input.className = 'form-checkbox text-blue-600 rounded';
-                        const span = document.createElement('span');
-                        span.textContent = user.name;
-                        label.appendChild(input);
-                        label.appendChild(span);
-                        usersContainer.appendChild(label);
-                    }
-                });
+                users = userSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
                 displayUsers();
+                renderTripUserCheckboxes();
             }, (error) => {
                 console.error("Error getting users data: ", error);
             });
 
+            // Listen for trip data and update the global trips array
             const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
             onSnapshot(tripsCollectionRef, (tripSnapshot) => {
-                const trips = [];
-                tripSnapshot.forEach(docSnap => {
-                    const data = docSnap.data() || {};
-                    trips.push({ id: docSnap.id, ...data });
-                });
+                trips = tripSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
                 trips.sort((a, b) => {
-                    const aTime = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
-                    const bTime = (b.timestamp && typeof b.timestamp.toMillis === 'function') ? b.timestamp.toMillis() : 0;
+                    const aTime = a.timestamp && typeof a.timestamp.toMillis === 'function' ? a.timestamp.toMillis() : 0;
+                    const bTime = b.timestamp && typeof b.timestamp.toMillis === 'function' ? b.timestamp.toMillis() : 0;
                     return bTime - aTime;
                 });
                 displayTrips(trips);
@@ -450,13 +431,19 @@
         }
 
         // ---------- Firestore write helpers ----------
-        async function deleteUser(userId) {
-            if (!isAuthReady) {
+        async function deleteUser(userIdToDelete) {
+            if (!db) {
                 showModal('Not connected to Firestore. Cannot delete user.', false);
                 return;
             }
             try {
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userId));
+                // Check for associated trips before deleting user
+                const tripsWithUser = trips.filter(trip => trip.users.includes(userIdToDelete));
+                if (tripsWithUser.length > 0) {
+                    showModal(`Cannot delete user. This user is associated with ${tripsWithUser.length} trip(s).`, false);
+                    return;
+                }
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userIdToDelete));
             } catch (error) {
                 console.error("Error deleting user:", error);
                 showModal("Failed to delete user. Please try again.", false);
@@ -464,7 +451,7 @@
         }
 
         async function deleteTrip(tripId) {
-            if (!isAuthReady) {
+            if (!db) {
                 showModal('Not connected to Firestore. Cannot delete trip.', false);
                 return;
             }
@@ -477,6 +464,26 @@
         }
 
         // ---------- UI render functions ----------
+        function renderTripUserCheckboxes() {
+            const usersContainer = document.getElementById('tripUsersContainer');
+            if (!usersContainer) return;
+            usersContainer.innerHTML = '';
+            users.forEach(user => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.name = 'tripUser';
+                input.value = user.id;
+                input.className = 'form-checkbox text-blue-600 rounded';
+                const span = document.createElement('span');
+                span.textContent = escapeHtml(user.name);
+                label.appendChild(input);
+                label.appendChild(span);
+                usersContainer.appendChild(label);
+            });
+        }
+
         function displayUsers() {
             const usersListElement = document.getElementById('usersList');
             if (!usersListElement) return;
@@ -484,29 +491,26 @@
             users.forEach(user => {
                 const li = document.createElement('li');
                 li.className = 'flex justify-between items-center';
-                li.innerHTML = `<span>${escapeHtml(user.name)}</span>`;
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = escapeHtml(user.name);
+                li.appendChild(nameSpan);
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = 'Delete';
                 deleteBtn.addEventListener('click', () => {
-                    showModal(`Delete user "${user.name}"?`, true, () => deleteUser(user.id));
+                    showModal(`Are you sure you want to delete "${user.name}"?`, true, () => deleteUser(user.id));
                 });
                 li.appendChild(deleteBtn);
                 usersListElement.appendChild(li);
             });
         }
 
-        function displayTrips(trips) {
+        function displayTrips(tripsToDisplay) {
             const tripsListElement = document.getElementById('tripsList');
             if (!tripsListElement) return;
             tripsListElement.innerHTML = '';
-            
-            if (trips.length === 0) {
-                tripsListElement.innerHTML = '<p class="text-gray-500 text-center">No trips logged yet.</p>';
-                return;
-            }
 
-            trips.forEach(trip => {
+            tripsToDisplay.forEach(trip => {
                 const responsibleUserNames = Array.isArray(trip.users) ? trip.users.map(userId => {
                     const u = users.find(x => x.id === userId);
                     return u ? u.name : 'Unknown User';
@@ -515,8 +519,6 @@
                 let dateStr = 'Unknown date';
                 if (trip.timestamp && typeof trip.timestamp.toDate === 'function') {
                     dateStr = new Date(trip.timestamp.toDate()).toLocaleString();
-                } else if (trip.timestamp && typeof trip.timestamp.toMillis === 'function') {
-                    dateStr = new Date(trip.timestamp.toMillis()).toLocaleString();
                 }
 
                 const li = document.createElement('li');
@@ -533,12 +535,59 @@
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = 'Delete';
                 deleteBtn.addEventListener('click', () => {
-                    showModal(`Delete trip to "${trip.destination}"?`, true, () => deleteTrip(trip.id));
+                    showModal(`Are you sure you want to delete the trip to "${trip.destination}"?`, true, () => deleteTrip(trip.id));
                 });
                 li.appendChild(left);
                 li.appendChild(deleteBtn);
                 tripsListElement.appendChild(li);
             });
+        }
+
+        function generateReport(gasPrice, avgMpg) {
+            const reportContainer = document.getElementById('reportContainer');
+            if (!reportContainer) return;
+            
+            const totalMiles = trips.reduce((sum, trip) => sum + (trip.miles || 0), 0);
+            const totalGallons = totalMiles / avgMpg;
+            const estimatedTotalCost = totalGallons * gasPrice;
+
+            let reportHtml = `
+                <div class="report-summary">
+                    <h3 class="text-green-800">Trip Report</h3>
+                    <p><strong>Total Miles Driven:</strong> ${totalMiles.toFixed(2)} miles</p>
+                    <p><strong>Estimated Gallons Used:</strong> ${totalGallons.toFixed(2)} gallons</p>
+                    <p><strong>Estimated Total Fuel Cost:</strong> $${estimatedTotalCost.toFixed(2)}</p>
+                </div>
+            `;
+            
+            // Generate user-specific cost breakdown
+            const userCosts = users.reduce((acc, user) => {
+                acc[user.id] = { name: user.name, miles: 0, cost: 0 };
+                return acc;
+            }, {});
+
+            trips.forEach(trip => {
+                if (!trip.users || trip.users.length === 0) return;
+                const milesPerUser = (trip.miles || 0) / trip.users.length;
+                trip.users.forEach(userId => {
+                    if (userCosts[userId]) {
+                        userCosts[userId].miles += milesPerUser;
+                    }
+                });
+            });
+
+            reportHtml += `<h3 class="mt-8 text-green-800 font-bold text-xl">Individual Cost Breakdown</h3>`;
+            reportHtml += `<ul class="list-disc ml-6 mt-4 space-y-2">`;
+            for (const userId in userCosts) {
+                const user = userCosts[userId];
+                const userGallons = user.miles / avgMpg;
+                const userCost = userGallons * gasPrice;
+                reportHtml += `<li><strong>${escapeHtml(user.name)}:</strong> ${user.miles.toFixed(2)} miles ($${userCost.toFixed(2)})</li>`;
+            }
+            reportHtml += `</ul>`;
+
+            reportContainer.innerHTML = reportHtml;
+            reportContainer.classList.remove('hidden');
         }
 
         function escapeHtml(unsafe) {
@@ -550,7 +599,6 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // Initial call
         window.addEventListener('load', initializeFirebase);
     </script>
 </body>
