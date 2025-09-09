@@ -132,6 +132,10 @@
             flex-wrap: wrap;
             gap: 1rem;
         }
+        .select-all {
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -180,7 +184,7 @@
                 <button type="submit" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors">Add Trip</button>
             </form>
 
-            <h2 class="text-2xl font-bold mt-8 mb-4">Logged Trips</h2>
+            <h2 class="text-2xl font-bold mt-8 mb-4">Logged Trips (Unpaid Only)</h2>
             <ul id="tripsList" class="item-list"></ul>
         </div>
 
@@ -203,7 +207,7 @@
             <h2 class="text-2xl font-bold mb-4">Pay Trip Fees</h2>
             <form id="payForm" class="space-y-4">
                 <div class="input-group">
-                    <label>Users with Trip Balances</label>
+                    <label>Users with Unpaid Trips</label>
                     <div id="payUsersContainer" class="flex flex-wrap gap-2">
                         <!-- Checkboxes will be dynamically added here -->
                     </div>
@@ -223,14 +227,19 @@
 
         <!-- Advanced Section -->
         <div id="advancedSection" class="hidden section-container mt-0">
-            <h2 class="text-2xl font-bold mb-4">Advanced Search</h2>
+            <h2 class="text-2xl font-bold mb-4">Advanced Search (All Trips, Paid or Unpaid)</h2>
             <form id="searchForm" class="space-y-4">
                 <div class="input-group">
-                    <label for="searchUser">Search by User (Optional)</label>
-                    <select id="searchUser">
-                        <option value="">All Users</option>
-                        <!-- Options will be dynamically added -->
-                    </select>
+                    <label>Users (Optional - Check to Filter)</label>
+                    <div class="select-all">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="selectAllSearchUsers" class="form-checkbox text-blue-600 rounded">
+                            <span>Select All</span>
+                        </label>
+                    </div>
+                    <div id="searchUsersContainer" class="flex flex-wrap gap-2">
+                        <!-- Checkboxes will be dynamically added here -->
+                    </div>
                 </div>
                 <div class="input-group">
                     <label for="startDate">Start Date</label>
@@ -360,7 +369,7 @@
                 displayUsers();
                 renderTripUserCheckboxes();
                 renderPayUserCheckboxes();
-                renderSearchUserOptions();
+                renderSearchUserCheckboxes();
             }, (error) => console.error("Error getting users:", error));
 
             const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
@@ -388,7 +397,7 @@
                 showModal('User deleted successfully!');
             } catch (error) {
                 console.error("Error deleting user:", error);
-                showModal(`Failed to delete user: ${error.message}`, false);
+                showModal(`Failed to delete user: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
             }
         }
 
@@ -399,7 +408,7 @@
                 showModal('Trip deleted successfully!');
             } catch (error) {
                 console.error("Error deleting trip:", error);
-                showModal(`Failed to delete trip: ${error.message}`, false);
+                showModal(`Failed to delete trip: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
             }
         }
 
@@ -413,7 +422,7 @@
                 showModal('Trip updated successfully!');
             } catch (error) {
                 console.error("Error updating trip:", error);
-                showModal(`Failed to update trip: ${error.message}`, false);
+                showModal(`Failed to update trip: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
             }
         }
 
@@ -442,35 +451,52 @@
             const usersContainer = document.getElementById('payUsersContainer');
             if (!usersContainer) return;
             usersContainer.innerHTML = '';
-            users.forEach(user => {
-                const hasUnpaidTrips = trips.some(trip => trip.users.includes(user.id) && !trip.paid);
-                if (hasUnpaidTrips) {
-                    const label = document.createElement('label');
-                    label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
-                    const input = document.createElement('input');
-                    input.type = 'checkbox';
-                    input.name = 'payUser';
-                    input.value = user.id;
-                    input.className = 'form-checkbox text-blue-600 rounded';
-                    const span = document.createElement('span');
-                    span.textContent = escapeHtml(user.name);
-                    label.appendChild(input);
-                    label.appendChild(span);
-                    usersContainer.appendChild(label);
-                }
+            const usersWithUnpaid = users.filter(user => trips.some(trip => trip.users.includes(user.id) && !trip.paid));
+            usersWithUnpaid.forEach(user => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.name = 'payUser';
+                input.value = user.id;
+                input.className = 'form-checkbox text-blue-600 rounded';
+                const span = document.createElement('span');
+                span.textContent = escapeHtml(user.name);
+                label.appendChild(input);
+                label.appendChild(span);
+                usersContainer.appendChild(label);
             });
+            if (usersWithUnpaid.length === 0) {
+                usersContainer.innerHTML = '<p class="text-gray-500">No users with unpaid trips.</p>';
+            }
         }
 
-        function renderSearchUserOptions() {
-            const select = document.getElementById('searchUser');
-            if (!select) return;
-            select.innerHTML = '<option value="">All Users</option>';
-            users.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.id;
-                option.textContent = escapeHtml(user.name);
-                select.appendChild(option);
+        function renderSearchUserCheckboxes() {
+            const usersContainer = document.getElementById('searchUsersContainer');
+            if (!usersContainer) return;
+            usersContainer.innerHTML = '';
+            const usersWithAnyTrips = users.filter(user => trips.some(trip => trip.users.includes(user.id)));
+            usersWithAnyTrips.forEach(user => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.name = 'searchUser';
+                input.value = user.id;
+                input.className = 'form-checkbox text-blue-600 rounded';
+                const span = document.createElement('span');
+                span.textContent = escapeHtml(user.name);
+                label.appendChild(input);
+                label.appendChild(span);
+                usersContainer.appendChild(label);
             });
+            const selectAll = document.getElementById('selectAllSearchUsers');
+            selectAll.addEventListener('change', () => {
+                document.querySelectorAll('input[name="searchUser"]').forEach(cb => cb.checked = selectAll.checked);
+            });
+            if (usersWithAnyTrips.length === 0) {
+                usersContainer.innerHTML = '<p class="text-gray-500">No users with trips yet.</p>';
+            }
         }
 
         function displayUsers() {
@@ -497,9 +523,11 @@
         function displayTrips() {
             const tripsListElement = document.getElementById('tripsList');
             if (!tripsListElement) return;
+            // Only show unpaid trips
+            const unpaidTrips = trips.filter(trip => !trip.paid);
             tripsListElement.innerHTML = '';
 
-            trips.forEach(trip => {
+            unpaidTrips.forEach(trip => {
                 const responsibleUserNames = Array.isArray(trip.users) ? trip.users.map(userId => {
                     const u = users.find(x => x.id === userId);
                     return u ? u.name : 'Unknown User';
@@ -538,6 +566,9 @@
                 li.appendChild(buttons);
                 tripsListElement.appendChild(li);
             });
+            if (unpaidTrips.length === 0) {
+                tripsListElement.innerHTML = '<li class="text-gray-500">No unpaid trips.</li>';
+            }
         }
 
         function openEditTripForm(trip) {
@@ -595,7 +626,12 @@
                 const destination = document.getElementById('editTripDestination').value.trim();
                 const miles = parseFloat(document.getElementById('editTripMiles').value);
                 const gasPrice = parseFloat(document.getElementById('editTripGasPrice').value) || null;
-                const timestamp = document.getElementById('editTripDateTime').value;
+                const timestampStr = document.getElementById('editTripDateTime').value;
+                if (!timestampStr) {
+                    showModal('Please select a date and time.');
+                    return;
+                }
+                const timestamp = new Date(timestampStr).toISOString();
                 const notes = document.getElementById('editTripNotes').value.trim();
                 const selectedUserIds = Array.from(document.querySelectorAll('input[name="editTripUser"]:checked')).map(cb => cb.value);
 
@@ -736,16 +772,16 @@
             doc.save(filename);
         }
 
-        function generateSearchReport(tripsToInclude, selectedUserId) {
+        function generateSearchReport(filteredTrips) {
             const searchResults = document.getElementById('searchResults');
             if (!searchResults) return;
 
             let reportHtml = `<h3 class="text-xl font-bold mt-4">Search Results</h3>`;
-            if (tripsToInclude.length === 0) {
+            if (filteredTrips.length === 0) {
                 reportHtml += `<p>No trips found for the selected criteria.</p>`;
             } else {
                 reportHtml += `<ul class="item-list">`;
-                tripsToInclude.forEach(trip => {
+                filteredTrips.forEach(trip => {
                     const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
                     const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
                     reportHtml += `
@@ -770,7 +806,7 @@
             const pdfBtn = document.getElementById('searchPdfBtn');
             if (pdfBtn) {
                 pdfBtn.addEventListener('click', () => {
-                    generateTripReportPdf(tripsToInclude, selectedUserId ? [selectedUserId] : users.map(u => u.id), 0, 1, false);
+                    generateTripReportPdf(filteredTrips, users.map(u => u.id), 0, 1, false);
                 });
             }
         }
@@ -924,30 +960,35 @@
             if (searchForm) {
                 searchForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    const selectedUserId = document.getElementById('searchUser')?.value;
-                    const startDate = document.getElementById('startDate')?.value;
-                    const endDate = document.getElementById('endDate')?.value;
+                    const selectedUserCheckboxes = document.querySelectorAll('input[name="searchUser"]:checked');
+                    const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
+                    const startDateStr = document.getElementById('startDate')?.value;
+                    const endDateStr = document.getElementById('endDate')?.value;
 
-                    if (!startDate || !endDate) {
+                    if (!startDateStr || !endDateStr) {
                         showModal('Please select both start and end dates.');
                         return;
                     }
 
-                    const start = new Date(startDate);
-                    const end = new Date(endDate);
-                    end.setHours(23, 59, 59, 999); // Include full end date
+                    // Fix for same-day search: Set full day range in local time
+                    const start = new Date(startDateStr + 'T00:00:00'); // Start of day
+                    const end = new Date(endDateStr + 'T23:59:59.999'); // End of day
 
-                    let filteredTrips = trips;
-                    if (selectedUserId) {
-                        filteredTrips = filteredTrips.filter(trip => trip.users.includes(selectedUserId));
-                    }
-                    filteredTrips = filteredTrips.filter(trip => {
+                    console.log('Search range:', start, 'to', end); // Debug log
+
+                    let filteredTrips = trips.filter(trip => {
                         if (!trip.timestamp) return false;
                         const tripDate = new Date(trip.timestamp);
-                        return tripDate >= start && tripDate <= end;
+                        const inDateRange = tripDate >= start && tripDate <= end;
+                        if (!inDateRange) return false;
+                        // Filter by selected users if any
+                        if (selectedUserIds.length > 0) {
+                            return selectedUserIds.some(id => trip.users.includes(id));
+                        }
+                        return true; // All users if none selected
                     });
 
-                    generateSearchReport(filteredTrips, selectedUserId);
+                    generateSearchReport(filteredTrips);
                 });
             }
         }
