@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trip Tracker</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -19,7 +18,7 @@
         }
         .section-container {
             background-color: #ffffff;
-            border-radius: 0 1rem 1rem 1rem;
+            border-radius: 1rem;
             padding: 2rem;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
@@ -29,10 +28,6 @@
             cursor: pointer;
             transition: background-color 0.2s;
             font-weight: 600;
-            border: 1px solid #e5e7eb;
-            border-bottom: none;
-            background-color: #e5e7eb;
-            z-index: 10;
         }
         .tab-button.active {
             background-color: #ffffff;
@@ -40,12 +35,10 @@
             border-top: 2px solid #3b82f6;
             border-left: 1px solid #e5e7eb;
             border-right: 1px solid #e5e7eb;
-            margin-bottom: -1px; /* Overlap with section container border */
+            border-bottom: none;
         }
-        .tab-group {
-            border-bottom: 1px solid #e5e7eb;
-            position: relative;
-            z-index: 0;
+        .tab-button:not(.active) {
+            background-color: #e5e7eb;
         }
         .input-group {
             display: flex;
@@ -99,14 +92,14 @@
         <p id="userIdDisplay" class="text-center text-sm text-gray-500 mb-4"></p>
 
         <!-- Tabs for different sections of the app -->
-        <div class="flex tab-group">
+        <div class="flex">
             <button id="tripsTab" class="tab-button active">Trips</button>
             <button id="usersTab" class="tab-button">Users</button>
             <button id="fillupTab" class="tab-button">Fill-Up & Report</button>
         </div>
 
         <!-- Trips Section -->
-        <div id="tripsSection" class="section-container">
+        <div id="tripsSection" class="section-container mt-0">
             <h2 class="text-2xl font-bold mb-4">Log a New Trip</h2>
             <form id="tripForm" class="space-y-4">
                 <div class="input-group">
@@ -124,7 +117,7 @@
                 <div class="input-group">
                     <label>Responsible Users</label>
                     <div id="tripUsersContainer" class="flex flex-wrap gap-2">
-                        <!-- Checkboxes for users will be dynamically added here by JavaScript -->
+                        <!-- Checkboxes will be dynamically added here by JavaScript -->
                     </div>
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Add Trip</button>
@@ -134,7 +127,7 @@
         </div>
 
         <!-- Users Section -->
-        <div id="usersSection" class="hidden section-container">
+        <div id="usersSection" class="hidden section-container mt-0">
             <h2 class="text-2xl font-bold mb-4">Manage Users</h2>
             <form id="userForm" class="space-y-4 mb-8">
                 <div class="input-group">
@@ -148,9 +141,9 @@
         </div>
 
         <!-- Fill-up & Report Section -->
-        <div id="fillupSection" class="hidden section-container">
+        <div id="fillupSection" class="hidden section-container mt-0">
             <h2 class="text-2xl font-bold mb-4">Enter Fill-Up Details</h2>
-            <form id="fillupForm" class="space-y-4 mb-8">
+            <form id="fillupForm" class="space-y-4">
                 <div class="input-group">
                     <label for="gasPrice">Gas Price Per Gallon ($)</label>
                     <input type="number" step="0.01" id="gasPrice" placeholder="e.g., 3.50" required>
@@ -161,13 +154,8 @@
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Generate Report & Archive</button>
             </form>
-            <div id="reportContainer" class="hidden p-6 rounded-lg bg-gray-50 border border-gray-200">
-                <h3 class="text-xl font-bold mb-4">Trip Report</h3>
-                <div id="reportDetails"></div>
-            </div>
-            <h2 class="text-2xl font-bold mt-8 mb-4">Past Reports</h2>
-            <ul id="reportsList" class="item-list"></ul>
         </div>
+
     </div>
 
     <!-- Custom Modal -->
@@ -183,18 +171,16 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Global Variables ---
+        // --- Firebase Setup ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const firebaseConfig = JSON.parse(__firebase_config);
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db, auth, userId;
-        let trips = []; // In-memory cache for trips
-        let usersMap = {}; // In-memory map for fast user lookups {userId: userName}
+        let users = []; // In-memory cache for users
 
-        // --- Firebase Initialization ---
         async function initializeFirebase() {
-            if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+            if (!firebaseConfig) {
                 console.error("Firebase config is not available.");
                 showModal("Firebase is not configured. The app will not function correctly.");
                 return;
@@ -205,7 +191,6 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                // Authenticate the user
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
@@ -216,7 +201,7 @@
                 document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
                 console.log("User authenticated with ID:", userId);
 
-                // Set up real-time listeners for all collections
+                // Set up real-time listeners for users and trips
                 setupRealtimeListeners();
             } catch (error) {
                 console.error("Error during Firebase initialization or authentication:", error);
@@ -241,51 +226,35 @@
             const modal = document.getElementById('modal');
             const modalMessage = document.getElementById('modalMessage');
             modalMessage.textContent = message;
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            modal.style.display = 'flex';
         }
         document.getElementById('modalClose').addEventListener('click', () => {
-            const modal = document.getElementById('modal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            document.getElementById('modal').style.display = 'none';
         });
 
-        // --- Firestore Listeners ---
+        // --- Firestore Operations ---
         function setupRealtimeListeners() {
             // Listen for changes to the users collection
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
             onSnapshot(usersCollectionRef, (querySnapshot) => {
-                usersMap = {}; // Reset the local users map
-                const usersListElement = document.getElementById('usersList');
-                const tripUsersContainer = document.getElementById('tripUsersContainer');
-
-                usersListElement.innerHTML = '';
-                tripUsersContainer.innerHTML = '';
-
+                users = []; // Reset the local users cache
+                const usersContainer = document.getElementById('tripUsersContainer');
+                usersContainer.innerHTML = ''; // Clear previous checkboxes
                 querySnapshot.forEach((doc) => {
                     const userData = doc.data();
                     const user = { id: doc.id, name: userData.name };
-                    usersMap[user.id] = user.name; // Populate the map
+                    users.push(user);
 
-                    // Display user in the Users tab
-                    const userLi = document.createElement('li');
-                    userLi.innerHTML = `<span>${user.name}</span>`;
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'delete-btn';
-                    deleteBtn.textContent = 'Delete';
-                    deleteBtn.addEventListener('click', () => deleteUser(user.id));
-                    userLi.appendChild(deleteBtn);
-                    usersListElement.appendChild(userLi);
-
-                    // Create a checkbox for each user in the Trips tab
+                    // Create a checkbox for each user
                     const label = document.createElement('label');
                     label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
                     label.innerHTML = `
                         <input type="checkbox" name="tripUser" value="${user.id}" class="form-checkbox text-blue-600 rounded">
                         <span>${user.name}</span>
                     `;
-                    tripUsersContainer.appendChild(label);
+                    usersContainer.appendChild(label);
                 });
+                displayUsers();
             }, (error) => {
                 console.error("Error getting users data: ", error);
             });
@@ -293,38 +262,21 @@
             // Listen for changes to the trips collection
             const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
             onSnapshot(tripsCollectionRef, (querySnapshot) => {
-                trips = [];
+                const trips = [];
                 querySnapshot.forEach((doc) => {
                     trips.push({ id: doc.id, ...doc.data() });
                 });
                 trips.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-                displayTrips();
+                displayTrips(trips);
             }, (error) => {
                 console.error("Error getting trips data: ", error);
             });
-
-            // Listen for changes to the reports collection
-            const reportsCollectionRef = collection(db, `artifacts/${appId}/public/data/reports`);
-            onSnapshot(reportsCollectionRef, (querySnapshot) => {
-                const reports = [];
-                querySnapshot.forEach((doc) => {
-                    reports.push({ id: doc.id, ...doc.data() });
-                });
-                reports.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-                displayReports(reports);
-            }, (error) => {
-                console.error("Error getting reports data: ", error);
-            });
         }
 
-        // --- Form Submission Handlers ---
+        // Add a new user to Firestore
         document.getElementById('userForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const userName = document.getElementById('userName').value;
-            if (!userName.trim()) {
-                showModal("Please enter a user name.");
-                return;
-            }
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
             try {
                 await addDoc(usersCollectionRef, {
@@ -338,6 +290,7 @@
             }
         });
 
+        // Add a new trip to Firestore
         document.getElementById('tripForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const tripDestination = document.getElementById('tripDestination').value;
@@ -363,6 +316,7 @@
                     timestamp: serverTimestamp()
                 });
                 e.target.reset();
+                // Uncheck all checkboxes after successful submission
                 selectedUserCheckboxes.forEach(checkbox => checkbox.checked = false);
             } catch (error) {
                 console.error("Error adding trip:", error);
@@ -370,168 +324,77 @@
             }
         });
 
-        document.getElementById('fillupForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const gasPrice = parseFloat(document.getElementById('gasPrice').value);
-            const avgMpg = parseFloat(document.getElementById('avgMpg').value);
-
-            if (trips.length === 0) {
-                showModal("There are no trips to report on. Please log some trips first.");
-                return;
-            }
-            if (gasPrice <= 0 || avgMpg <= 0) {
-                showModal("Gas price and average MPG must be positive numbers.");
-                return;
-            }
-
-            // Calculate total miles and cost
-            const totalMiles = trips.reduce((sum, trip) => sum + trip.miles, 0);
-            const totalGallons = totalMiles / avgMpg;
-            const totalCost = totalGallons * gasPrice;
-
-            // Group trips by user and calculate individual miles and cost
-            const userTotals = {};
-            trips.forEach(trip => {
-                const milesPerUser = trip.miles / trip.users.length;
-                const costPerUser = (milesPerUser / avgMpg) * gasPrice;
-
-                trip.users.forEach(userId => {
-                    const userName = usersMap[userId] || 'Unknown User';
-                    if (!userTotals[userId]) {
-                        userTotals[userId] = {
-                            name: userName,
-                            miles: 0,
-                            cost: 0
-                        };
-                    }
-                    userTotals[userId].miles += milesPerUser;
-                    userTotals[userId].cost += costPerUser;
-                });
-            });
-
-            // Display the report
-            const reportDetails = document.getElementById('reportDetails');
-            reportDetails.innerHTML = `
-                <p><strong>Total Miles Driven:</strong> ${totalMiles.toFixed(2)}</p>
-                <p><strong>Total Gallons Used:</strong> ${totalGallons.toFixed(2)}</p>
-                <p><strong>Total Fuel Cost:</strong> $${totalCost.toFixed(2)}</p>
-                <h4 class="font-bold mt-4">Cost per User:</h4>
-                <ul class="list-disc ml-6 mt-2">
-                    ${Object.values(userTotals).map(user => `
-                        <li>${user.name}: $${user.cost.toFixed(2)} (${user.miles.toFixed(2)} miles)</li>
-                    `).join('')}
-                </ul>
-            `;
-            document.getElementById('reportContainer').classList.remove('hidden');
-
-            // Archive the report and clear trips
+        // Delete a user from Firestore
+        async function deleteUser(userId) {
             try {
-                const reportsCollectionRef = collection(db, `artifacts/${appId}/public/data/reports`);
-                await addDoc(reportsCollectionRef, {
-                    report: {
-                        totalMiles,
-                        totalGallons,
-                        totalCost,
-                        users: userTotals,
-                        date: new Date().toISOString()
-                    },
-                    timestamp: serverTimestamp()
-                });
-
-                // Delete all trips after archiving the report
-                const deletePromises = trips.map(trip => deleteDoc(doc(db, `artifacts/${appId}/public/data/trips`, trip.id)));
-                await Promise.all(deletePromises);
-
-                showModal("Report generated and trips have been archived!");
-                e.target.reset();
-            } catch (error) {
-                console.error("Error archiving report or clearing trips:", error);
-                showModal("Failed to archive report or clear trips.");
-            }
-        });
-
-        // --- Firestore Deletion Functions ---
-        async function deleteUser(id) {
-            try {
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, id));
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userId));
             } catch (error) {
                 console.error("Error deleting user:", error);
                 showModal("Failed to delete user. Please try again.");
             }
         }
 
-        async function deleteTrip(id) {
+        // Delete a trip from Firestore
+        async function deleteTrip(tripId) {
             try {
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/trips`, id));
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/trips`, tripId));
             } catch (error) {
                 console.error("Error deleting trip:", error);
                 showModal("Failed to delete trip. Please try again.");
             }
         }
 
-        async function deleteReport(id) {
-            try {
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/reports`, id));
-            } catch (error) {
-                console.error("Error deleting report:", error);
-                showModal("Failed to delete report. Please try again.");
-            }
-        }
+        // Display users in the UI
+        function displayUsers() {
+    const usersListElement = document.getElementById('usersList');
+    usersListElement.innerHTML = '';
+    users.forEach(user => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${user.name}</span>`;
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => deleteUser(user.id));
+        li.appendChild(deleteBtn);
+        usersListElement.appendChild(li);
+    });
+}
 
-        // --- UI Display Functions ---
-        function displayTrips() {
-            const tripsListElement = document.getElementById('tripsList');
-            tripsListElement.innerHTML = '';
-            trips.forEach(trip => {
-                const responsibleUserNames = trip.users.map(userId => {
-                    return usersMap[userId] || 'Unknown User';
-                }).join(', ');
+        // Display trips in the UI
+        function displayTrips(trips) {
+    const tripsListElement = document.getElementById('tripsList');
+    tripsListElement.innerHTML = '';
+    trips.forEach(trip => {
+        const responsibleUserNames = trip.users.map(userId => {
+            const user = users.find(u => u.id === userId);
+            return user ? user.name : 'Unknown User';
+        }).join(', ');
 
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <div>
-                        <p class="font-bold">${trip.destination}</p>
-                        <p class="text-sm text-gray-500">Miles: ${trip.miles}</p>
-                        <p class="text-sm text-gray-500">Users: ${responsibleUserNames}</p>
-                        <p class="text-sm text-gray-500">Notes: ${trip.notes || 'N/A'}</p>
-                        <p class="text-sm text-gray-500">Date: ${new Date(trip.timestamp.toDate()).toLocaleString()}</p>
-                    </div>
-                `;
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-btn';
-                deleteBtn.textContent = 'Delete';
-                deleteBtn.addEventListener('click', () => deleteTrip(trip.id));
-                li.appendChild(deleteBtn);
-                tripsListElement.appendChild(li);
-            });
-        }
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div>
+                <p class="font-bold">${trip.destination}</p>
+                <p class="text-sm text-gray-500">Miles: ${trip.miles}</p>
+                <p class="text-sm text-gray-500">Users: ${responsibleUserNames}</p>
+                <p class="text-sm text-gray-500">Notes: ${trip.notes || 'N/A'}</p>
+                <p class="text-sm text-gray-500">Date: ${new Date(trip.timestamp.toDate()).toLocaleString()}</p>
+            </div>
+        `;
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => deleteTrip(trip.id));
+        li.appendChild(deleteBtn);
+        tripsListElement.appendChild(li);
+    });
+}
 
-        function displayReports(reports) {
-            const reportsListElement = document.getElementById('reportsList');
-            reportsListElement.innerHTML = '';
-            reports.forEach(reportDoc => {
-                const report = reportDoc.report;
-                const li = document.createElement('li');
-                li.classList.add('flex-col', 'items-start'); // Adjust for multiline content
-                li.innerHTML = `
-                    <div class="w-full">
-                        <p class="font-bold">Report from ${new Date(reportDoc.timestamp.toDate()).toLocaleString()}</p>
-                        <p class="text-sm text-gray-500">Total Miles: ${report.totalMiles.toFixed(2)}</p>
-                        <p class="text-sm text-gray-500">Total Cost: $${report.totalCost.toFixed(2)}</p>
-                        <p class="text-sm text-gray-500">Users: ${Object.values(report.users).map(u => u.name).join(', ')}</p>
-                    </div>
-                `;
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-btn mt-2';
-                deleteBtn.textContent = 'Delete';
-                deleteBtn.addEventListener('click', () => deleteReport(reportDoc.id));
-                li.appendChild(deleteBtn);
-                reportsListElement.appendChild(li);
-            });
-        }
+        // Expose delete functions to global scope for onclick attributes
+        window.deleteUser = deleteUser;
+        window.deleteTrip = deleteTrip;
 
-        // Initialize the app on page load
-        initializeFirebase();
+        // Initialize the app
+        window.onload = initializeFirebase;
     </script>
 </body>
 </html>
