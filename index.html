@@ -124,6 +124,7 @@
                     <label>Responsible Users</label>
                     <div id="tripUsersContainer" class="flex flex-wrap gap-2">
                         <!-- Checkboxes will be dynamically added here -->
+                        <p class="text-gray-500">Loading users...</p>
                     </div>
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Add Trip</button>
@@ -183,6 +184,7 @@
 
         // --- Firebase Setup ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         let firebaseConfig = null;
         try {
             if (typeof __firebase_config !== 'undefined') {
@@ -192,17 +194,15 @@
             console.error('Failed to parse __firebase_config:', err);
             firebaseConfig = null;
         }
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db = null, auth = null, userId = null;
         let users = []; // In-memory cache for users
-        let modalAction = null; // Function to run on modal confirmation
+        let isAuthReady = false; // Flag to ensure DB operations only happen after auth
 
         async function initializeFirebase() {
             if (!firebaseConfig) {
                 console.error("Firebase config is not available.");
                 showModal("Firebase is not configured. The app will not function correctly.", false);
-                setupEventListeners();
                 return;
             }
 
@@ -211,17 +211,16 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                // Use onAuthStateChanged to handle the user state change reliably.
+                // Use a single onAuthStateChanged listener to handle the user state change reliably.
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        // User is signed in.
                         userId = user.uid;
                         document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
                         console.log("User authenticated with ID:", userId);
-                        // Now that we have a user, set up the database listeners.
+                        isAuthReady = true;
                         setupRealtimeListeners();
                     } else {
-                        // No user is signed in, so we sign in anonymously
+                        isAuthReady = false;
                         if (initialAuthToken) {
                             signInWithCustomToken(auth, initialAuthToken).catch(err => {
                                 console.error("Custom token sign-in failed:", err);
@@ -233,12 +232,11 @@
                     }
                 });
 
-                // Set up UI event listeners immediately, as they don't depend on Firebase
+                // Set up UI event listeners that don't depend on Firestore immediately
                 setupEventListeners();
             } catch (error) {
                 console.error("Error during Firebase initialization or authentication:", error);
                 showModal("Could not connect to Firebase. Please check the console for details.", false);
-                setupEventListeners();
             }
         }
 
@@ -317,15 +315,15 @@
             if (userForm) {
                 userForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
+                    if (!isAuthReady) {
+                        showModal("Authentication not ready. Please wait a moment.");
+                        return;
+                    }
                     const userNameEl = document.getElementById('userName');
                     if (!userNameEl) return;
                     const userName = userNameEl.value.trim();
                     if (!userName) {
                         showModal('Please enter a user name.');
-                        return;
-                    }
-                    if (!db) {
-                        showModal('Not connected to Firestore. Unable to add user.');
                         return;
                     }
                     const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
@@ -346,6 +344,10 @@
             if (tripForm) {
                 tripForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
+                    if (!isAuthReady) {
+                        showModal("Authentication not ready. Please wait a moment.");
+                        return;
+                    }
                     const destination = document.getElementById('tripDestination')?.value?.trim() || '';
                     const milesRaw = document.getElementById('tripMiles')?.value;
                     const miles = milesRaw ? parseFloat(milesRaw) : 0;
@@ -357,10 +359,7 @@
                         showModal("Please select at least one responsible user.");
                         return;
                     }
-                    if (!db) {
-                        showModal('Not connected to Firestore. Unable to add trip.');
-                        return;
-                    }
+
                     const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
                     try {
                         await addDoc(tripsCollectionRef, {
@@ -392,23 +391,26 @@
         
         // ---------- Firestore realtime listeners ----------
         function setupRealtimeListeners() {
-            if (!db) {
-                console.warn('Firestore not initialized; skipping realtime listeners.');
+            if (!isAuthReady) {
+                console.warn('Authentication not ready; skipping realtime listeners.');
                 return;
             }
 
-            // Listen for user data first, since it's a dependency for trips.
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
             onSnapshot(usersCollectionRef, (userSnapshot) => {
-                users = []; // Clear the users array
+                users = [];
                 const usersContainer = document.getElementById('tripUsersContainer');
                 if (usersContainer) usersContainer.innerHTML = '';
+                
+                if (userSnapshot.empty) {
+                     if (usersContainer) usersContainer.innerHTML = '<p class="text-gray-500">No users yet. Add one in the "Users" tab.</p>';
+                }
 
                 userSnapshot.forEach(docSnap => {
                     const data = docSnap.data() || {};
                     const user = { id: docSnap.id, name: data.name || 'Unnamed' };
                     users.push(user);
-                    // create checkbox + label
+                    
                     if (usersContainer) {
                         const label = document.createElement('label');
                         label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
@@ -425,33 +427,31 @@
                     }
                 });
                 displayUsers();
-
-                // ONLY AFTER USERS ARE LOADED, listen for trips.
-                const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
-                onSnapshot(tripsCollectionRef, (tripSnapshot) => {
-                    const trips = [];
-                    tripSnapshot.forEach(docSnap => {
-                        const data = docSnap.data() || {};
-                        trips.push({ id: docSnap.id, ...data });
-                    });
-                    trips.sort((a, b) => {
-                        const aTime = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
-                        const bTime = (b.timestamp && typeof b.timestamp.toMillis === 'function') ? b.timestamp.toMillis() : 0;
-                        return bTime - aTime;
-                    });
-                    displayTrips(trips);
-                }, (error) => {
-                    console.error("Error getting trips data: ", error);
-                });
-
             }, (error) => {
                 console.error("Error getting users data: ", error);
+            });
+
+            const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
+            onSnapshot(tripsCollectionRef, (tripSnapshot) => {
+                const trips = [];
+                tripSnapshot.forEach(docSnap => {
+                    const data = docSnap.data() || {};
+                    trips.push({ id: docSnap.id, ...data });
+                });
+                trips.sort((a, b) => {
+                    const aTime = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
+                    const bTime = (b.timestamp && typeof b.timestamp.toMillis === 'function') ? b.timestamp.toMillis() : 0;
+                    return bTime - aTime;
+                });
+                displayTrips(trips);
+            }, (error) => {
+                console.error("Error getting trips data: ", error);
             });
         }
 
         // ---------- Firestore write helpers ----------
         async function deleteUser(userId) {
-            if (!db) {
+            if (!isAuthReady) {
                 showModal('Not connected to Firestore. Cannot delete user.', false);
                 return;
             }
@@ -464,7 +464,7 @@
         }
 
         async function deleteTrip(tripId) {
-            if (!db) {
+            if (!isAuthReady) {
                 showModal('Not connected to Firestore. Cannot delete trip.', false);
                 return;
             }
@@ -500,6 +500,11 @@
             const tripsListElement = document.getElementById('tripsList');
             if (!tripsListElement) return;
             tripsListElement.innerHTML = '';
+            
+            if (trips.length === 0) {
+                tripsListElement.innerHTML = '<p class="text-gray-500 text-center">No trips logged yet.</p>';
+                return;
+            }
 
             trips.forEach(trip => {
                 const responsibleUserNames = Array.isArray(trip.users) ? trip.users.map(userId => {
@@ -545,9 +550,7 @@
                 .replace(/'/g, "&#039;");
         }
 
-        window.deleteUser = deleteUser;
-        window.deleteTrip = deleteTrip;
-
+        // Initial call
         window.addEventListener('load', initializeFirebase);
     </script>
 </body>
