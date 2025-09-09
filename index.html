@@ -136,6 +136,12 @@
             margin-bottom: 0.5rem;
             font-weight: 600;
         }
+        .no-users-message {
+            padding: 1rem;
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -366,10 +372,8 @@
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
             onSnapshot(usersCollectionRef, (userSnapshot) => {
                 users = userSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                displayUsers();
-                renderTripUserCheckboxes();
-                renderPayUserCheckboxes();
-                renderSearchUserCheckboxes();
+                console.log("Users updated:", users.length);
+                renderAll();
             }, (error) => console.error("Error getting users:", error));
 
             const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
@@ -380,8 +384,17 @@
                     const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
                     return bTime - aTime;
                 });
-                displayTrips();
+                console.log("Trips updated:", trips.length);
+                renderAll();
             }, (error) => console.error("Error getting trips:", error));
+        }
+
+        function renderAll() {
+            displayUsers();
+            renderTripUserCheckboxes();
+            renderPayUserCheckboxes();
+            renderSearchUserCheckboxes();
+            displayTrips();
         }
 
         // ---------- Data Helpers ----------
@@ -431,6 +444,10 @@
             const usersContainer = document.getElementById('tripUsersContainer');
             if (!usersContainer) return;
             usersContainer.innerHTML = '';
+            if (users.length === 0) {
+                usersContainer.innerHTML = '<p class="no-users-message">No users yet—add some in the Users tab.</p>';
+                return;
+            }
             users.forEach(user => {
                 const label = document.createElement('label');
                 label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
@@ -452,6 +469,10 @@
             if (!usersContainer) return;
             usersContainer.innerHTML = '';
             const usersWithUnpaid = users.filter(user => trips.some(trip => trip.users.includes(user.id) && !trip.paid));
+            if (usersWithUnpaid.length === 0) {
+                usersContainer.innerHTML = '<p class="no-users-message">No users with unpaid trips.</p>';
+                return;
+            }
             usersWithUnpaid.forEach(user => {
                 const label = document.createElement('label');
                 label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
@@ -466,17 +487,17 @@
                 label.appendChild(span);
                 usersContainer.appendChild(label);
             });
-            if (usersWithUnpaid.length === 0) {
-                usersContainer.innerHTML = '<p class="text-gray-500">No users with unpaid trips.</p>';
-            }
         }
 
         function renderSearchUserCheckboxes() {
             const usersContainer = document.getElementById('searchUsersContainer');
             if (!usersContainer) return;
             usersContainer.innerHTML = '';
-            const usersWithAnyTrips = users.filter(user => trips.some(trip => trip.users.includes(user.id)));
-            usersWithAnyTrips.forEach(user => {
+            if (users.length === 0) {
+                usersContainer.innerHTML = '<p class="no-users-message">No users yet.</p>';
+                return;
+            }
+            users.forEach(user => {
                 const label = document.createElement('label');
                 label.className = 'flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300';
                 const input = document.createElement('input');
@@ -494,9 +515,6 @@
             selectAll.addEventListener('change', () => {
                 document.querySelectorAll('input[name="searchUser"]').forEach(cb => cb.checked = selectAll.checked);
             });
-            if (usersWithAnyTrips.length === 0) {
-                usersContainer.innerHTML = '<p class="text-gray-500">No users with trips yet.</p>';
-            }
         }
 
         function displayUsers() {
