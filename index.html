@@ -169,18 +169,20 @@
     <div id="modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden modal-flex p-4">
         <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-lg text-center">
             <p id="modalMessage" class="mb-4 text-lg"></p>
-            <button id="modalClose" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">OK</button>
+            <div id="modalButtons" class="flex justify-center gap-4">
+                <button id="modalConfirm" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">Yes</button>
+                <button id="modalClose" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors">No</button>
+            </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Setup ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // Make sure your environment injects __firebase_config as a JSON string. If not available, firebaseConfig will be null.
         let firebaseConfig = null;
         try {
             if (typeof __firebase_config !== 'undefined') {
@@ -194,51 +196,51 @@
 
         let db = null, auth = null, userId = null;
         let users = []; // In-memory cache for users
+        let modalAction = null; // Function to run on modal confirmation
 
         async function initializeFirebase() {
-    if (!firebaseConfig) {
-        console.error("Firebase config is not available.");
-        showModal("Firebase is not configured. The app will not function correctly.");
-        // still set up UI handlers so the UI doesn't completely break
-        setupEventListeners();
-        return;
-    }
-
-    try {
-        const app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-
-        // Use onAuthStateChanged to handle the user state change reliably.
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // User is signed in.
-                userId = user.uid;
-                document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
-                console.log("User authenticated with ID:", userId);
-                // Now that we have a user, set up the database listeners.
-                setupRealtimeListeners();
-            } else {
-                // No user is signed in, so we sign in anonymously
-                if (initialAuthToken) {
-                    signInWithCustomToken(auth, initialAuthToken).catch(err => {
-                        console.error("Custom token sign-in failed:", err);
-                        signInAnonymously(auth);
-                    });
-                } else {
-                    signInAnonymously(auth);
-                }
+            if (!firebaseConfig) {
+                console.error("Firebase config is not available.");
+                showModal("Firebase is not configured. The app will not function correctly.", false);
+                setupEventListeners();
+                return;
             }
-        });
 
-        // Set up UI event listeners immediately, as they don't depend on Firebase
-        setupEventListeners();
-    } catch (error) {
-        console.error("Error during Firebase initialization or authentication:", error);
-        showModal("Could not connect to Firebase. Please check the console for details.");
-        setupEventListeners();
-    }
-}
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Use onAuthStateChanged to handle the user state change reliably.
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        // User is signed in.
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
+                        console.log("User authenticated with ID:", userId);
+                        // Now that we have a user, set up the database listeners.
+                        setupRealtimeListeners();
+                    } else {
+                        // No user is signed in, so we sign in anonymously
+                        if (initialAuthToken) {
+                            signInWithCustomToken(auth, initialAuthToken).catch(err => {
+                                console.error("Custom token sign-in failed:", err);
+                                signInAnonymously(auth);
+                            });
+                        } else {
+                            signInAnonymously(auth);
+                        }
+                    }
+                });
+
+                // Set up UI event listeners immediately, as they don't depend on Firebase
+                setupEventListeners();
+            } catch (error) {
+                console.error("Error during Firebase initialization or authentication:", error);
+                showModal("Could not connect to Firebase. Please check the console for details.", false);
+                setupEventListeners();
+            }
+        }
 
         // ---------- UI Helpers ----------
         function switchTab(tabName) {
@@ -248,7 +250,6 @@
                 fillup: { button: 'fillupTab', section: 'fillupSection' }
             };
 
-            // update active classes on tab buttons
             Object.keys(tabs).forEach(key => {
                 const btn = document.getElementById(tabs[key].button);
                 const sec = document.getElementById(tabs[key].section);
@@ -261,111 +262,134 @@
                 }
             });
         }
-
-        function showModal(message) {
+        function showModal(message, isConfirmation = false, onConfirm = null) {
             const modal = document.getElementById('modal');
             const modalMessage = document.getElementById('modalMessage');
+            const modalButtons = document.getElementById('modalButtons');
             modalMessage.textContent = message;
+            
+            modalButtons.innerHTML = '';
+            
+            if (isConfirmation) {
+                const confirmBtn = document.createElement('button');
+                confirmBtn.id = 'modalConfirm';
+                confirmBtn.className = 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors';
+                confirmBtn.textContent = 'Yes';
+                confirmBtn.onclick = () => {
+                    if (onConfirm) onConfirm();
+                    hideModal();
+                };
+                
+                const cancelBtn = document.createElement('button');
+                cancelBtn.id = 'modalCancel';
+                cancelBtn.className = 'bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors';
+                cancelBtn.textContent = 'No';
+                cancelBtn.onclick = hideModal;
+                
+                modalButtons.appendChild(confirmBtn);
+                modalButtons.appendChild(cancelBtn);
+            } else {
+                const okBtn = document.createElement('button');
+                okBtn.id = 'modalClose';
+                okBtn.className = 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors';
+                okBtn.textContent = 'OK';
+                okBtn.onclick = hideModal;
+                modalButtons.appendChild(okBtn);
+            }
             modal.classList.remove('hidden');
         }
+        
         function hideModal() {
             const modal = document.getElementById('modal');
             modal.classList.add('hidden');
         }
-        document.getElementById('modalClose').addEventListener('click', hideModal);
 
         // ---------- Event listeners (single place) ----------
         function setupEventListeners() {
-    // Tab switching logic
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.addEventListener('click', () => {
-            const tabId = button.id.replace('Tab', '');
-            switchTab(tabId);
-        });
-    });
-
-    // User form submit
-    const userForm = document.getElementById('userForm');
-    if (userForm) {
-        userForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const userNameEl = document.getElementById('userName');
-            if (!userNameEl) return;
-            const userName = userNameEl.value.trim();
-            if (!userName) {
-                showModal('Please enter a user name.');
-                return;
-            }
-            if (!db) {
-                showModal('Not connected to Firestore. Unable to add user.');
-                return;
-            }
-            const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
-            try {
-                await addDoc(usersCollectionRef, {
-                    name: userName,
-                    timestamp: serverTimestamp()
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const tabId = button.id.replace('Tab', '');
+                    switchTab(tabId);
                 });
-                e.target.reset();
-            } catch (error) {
-                console.error("Error adding user:", error);
-                showModal("Failed to add user. Please check your internet connection.");
-            }
-        });
-    }
+            });
 
-    // Trip form submit
-    const tripForm = document.getElementById('tripForm');
-    if (tripForm) {
-        tripForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const destination = document.getElementById('tripDestination')?.value?.trim() || '';
-            const milesRaw = document.getElementById('tripMiles')?.value;
-            const miles = milesRaw ? parseFloat(milesRaw) : 0;
-            const notes = document.getElementById('tripNotes')?.value?.trim() || '';
-
-            // collect selected users
-            const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
-            const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
-
-            if (selectedUserIds.length === 0) {
-                showModal("Please select at least one responsible user.");
-                return;
-            }
-            if (!db) {
-                showModal('Not connected to Firestore. Unable to add trip.');
-                return;
-            }
-            const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
-            try {
-                await addDoc(tripsCollectionRef, {
-                    destination,
-                    miles,
-                    notes,
-                    users: selectedUserIds,
-                    timestamp: serverTimestamp()
+            const userForm = document.getElementById('userForm');
+            if (userForm) {
+                userForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const userNameEl = document.getElementById('userName');
+                    if (!userNameEl) return;
+                    const userName = userNameEl.value.trim();
+                    if (!userName) {
+                        showModal('Please enter a user name.');
+                        return;
+                    }
+                    if (!db) {
+                        showModal('Not connected to Firestore. Unable to add user.');
+                        return;
+                    }
+                    const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
+                    try {
+                        await addDoc(usersCollectionRef, {
+                            name: userName,
+                            timestamp: serverTimestamp()
+                        });
+                        e.target.reset();
+                    } catch (error) {
+                        console.error("Error adding user:", error);
+                        showModal("Failed to add user. Please check your internet connection.");
+                    }
                 });
-                e.target.reset();
-                selectedUserCheckboxes.forEach(cb => cb.checked = false);
-            } catch (error) {
-                console.error("Error adding trip:", error);
-                showModal("Failed to add trip. Please check your internet connection.");
             }
-        });
-    }
 
-    // Fill-up form (placeholder behavior — you can customize further)
-    const fillupForm = document.getElementById('fillupForm');
-    if (fillupForm) {
-        fillupForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const gasPrice = document.getElementById('gasPrice')?.value;
-            const avgMpg = document.getElementById('avgMpg')?.value;
-            showModal(`Report generated (placeholder)\nGas: ${gasPrice}\nMPG: ${avgMpg}`);
-        });
-    }
-}
+            const tripForm = document.getElementById('tripForm');
+            if (tripForm) {
+                tripForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const destination = document.getElementById('tripDestination')?.value?.trim() || '';
+                    const milesRaw = document.getElementById('tripMiles')?.value;
+                    const miles = milesRaw ? parseFloat(milesRaw) : 0;
+                    const notes = document.getElementById('tripNotes')?.value?.trim() || '';
+                    const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
+                    const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
 
+                    if (selectedUserIds.length === 0) {
+                        showModal("Please select at least one responsible user.");
+                        return;
+                    }
+                    if (!db) {
+                        showModal('Not connected to Firestore. Unable to add trip.');
+                        return;
+                    }
+                    const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
+                    try {
+                        await addDoc(tripsCollectionRef, {
+                            destination,
+                            miles,
+                            notes,
+                            users: selectedUserIds,
+                            timestamp: serverTimestamp()
+                        });
+                        e.target.reset();
+                        selectedUserCheckboxes.forEach(cb => cb.checked = false);
+                    } catch (error) {
+                        console.error("Error adding trip:", error);
+                        showModal("Failed to add trip. Please check your internet connection.");
+                    }
+                });
+            }
+
+            const fillupForm = document.getElementById('fillupForm');
+            if (fillupForm) {
+                fillupForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const gasPrice = document.getElementById('gasPrice')?.value;
+                    const avgMpg = document.getElementById('avgMpg')?.value;
+                    showModal(`Report generated (placeholder)\nGas: ${gasPrice}\nMPG: ${avgMpg}`);
+                });
+            }
+        }
+        
         // ---------- Firestore realtime listeners ----------
         function setupRealtimeListeners() {
             if (!db) {
@@ -373,18 +397,17 @@
                 return;
             }
 
-            // users
+            // Listen for user data first, since it's a dependency for trips.
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
-            onSnapshot(usersCollectionRef, (querySnapshot) => {
-                users = [];
+            onSnapshot(usersCollectionRef, (userSnapshot) => {
+                users = []; // Clear the users array
                 const usersContainer = document.getElementById('tripUsersContainer');
                 if (usersContainer) usersContainer.innerHTML = '';
 
-                querySnapshot.forEach(docSnap => {
+                userSnapshot.forEach(docSnap => {
                     const data = docSnap.data() || {};
                     const user = { id: docSnap.id, name: data.name || 'Unnamed' };
                     users.push(user);
-
                     // create checkbox + label
                     if (usersContainer) {
                         const label = document.createElement('label');
@@ -401,58 +424,55 @@
                         usersContainer.appendChild(label);
                     }
                 });
-
                 displayUsers();
+
+                // ONLY AFTER USERS ARE LOADED, listen for trips.
+                const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
+                onSnapshot(tripsCollectionRef, (tripSnapshot) => {
+                    const trips = [];
+                    tripSnapshot.forEach(docSnap => {
+                        const data = docSnap.data() || {};
+                        trips.push({ id: docSnap.id, ...data });
+                    });
+                    trips.sort((a, b) => {
+                        const aTime = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
+                        const bTime = (b.timestamp && typeof b.timestamp.toMillis === 'function') ? b.timestamp.toMillis() : 0;
+                        return bTime - aTime;
+                    });
+                    displayTrips(trips);
+                }, (error) => {
+                    console.error("Error getting trips data: ", error);
+                });
+
             }, (error) => {
                 console.error("Error getting users data: ", error);
-            });
-
-            // trips
-            const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
-            onSnapshot(tripsCollectionRef, (querySnapshot) => {
-                const trips = [];
-                querySnapshot.forEach(docSnap => {
-                    const data = docSnap.data() || {};
-                    trips.push({ id: docSnap.id, ...data });
-                });
-
-                // robust sort: use timestamp.toMillis if available, otherwise 0
-                trips.sort((a, b) => {
-                    const aTime = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
-                    const bTime = (b.timestamp && typeof b.timestamp.toMillis === 'function') ? b.timestamp.toMillis() : 0;
-                    return bTime - aTime;
-                });
-
-                displayTrips(trips);
-            }, (error) => {
-                console.error("Error getting trips data: ", error);
             });
         }
 
         // ---------- Firestore write helpers ----------
         async function deleteUser(userId) {
             if (!db) {
-                showModal('Not connected to Firestore. Cannot delete user.');
+                showModal('Not connected to Firestore. Cannot delete user.', false);
                 return;
             }
             try {
                 await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userId));
             } catch (error) {
                 console.error("Error deleting user:", error);
-                showModal("Failed to delete user. Please try again.");
+                showModal("Failed to delete user. Please try again.", false);
             }
         }
 
         async function deleteTrip(tripId) {
             if (!db) {
-                showModal('Not connected to Firestore. Cannot delete trip.');
+                showModal('Not connected to Firestore. Cannot delete trip.', false);
                 return;
             }
             try {
                 await deleteDoc(doc(db, `artifacts/${appId}/public/data/trips`, tripId));
             } catch (error) {
                 console.error("Error deleting trip:", error);
-                showModal("Failed to delete trip. Please try again.");
+                showModal("Failed to delete trip. Please try again.", false);
             }
         }
 
@@ -469,7 +489,7 @@
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = 'Delete';
                 deleteBtn.addEventListener('click', () => {
-                    if (confirm(`Delete user "${user.name}"?`)) deleteUser(user.id);
+                    showModal(`Delete user "${user.name}"?`, true, () => deleteUser(user.id));
                 });
                 li.appendChild(deleteBtn);
                 usersListElement.appendChild(li);
@@ -482,13 +502,11 @@
             tripsListElement.innerHTML = '';
 
             trips.forEach(trip => {
-                // resolve user names (may be missing if users not loaded)
                 const responsibleUserNames = Array.isArray(trip.users) ? trip.users.map(userId => {
                     const u = users.find(x => x.id === userId);
                     return u ? u.name : 'Unknown User';
                 }).join(', ') : 'N/A';
 
-                // handle timestamp safely
                 let dateStr = 'Unknown date';
                 if (trip.timestamp && typeof trip.timestamp.toDate === 'function') {
                     dateStr = new Date(trip.timestamp.toDate()).toLocaleString();
@@ -498,7 +516,6 @@
 
                 const li = document.createElement('li');
                 li.className = 'flex justify-between items-start';
-
                 const left = document.createElement('div');
                 left.innerHTML = `
                     <p class="font-bold">${escapeHtml(trip.destination || 'No destination')}</p>
@@ -511,16 +528,14 @@
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = 'Delete';
                 deleteBtn.addEventListener('click', () => {
-                    if (confirm(`Delete trip "${trip.destination}"?`)) deleteTrip(trip.id);
+                    showModal(`Delete trip to "${trip.destination}"?`, true, () => deleteTrip(trip.id));
                 });
-
                 li.appendChild(left);
                 li.appendChild(deleteBtn);
                 tripsListElement.appendChild(li);
             });
         }
 
-        // simple HTML escape to avoid any injection when injecting data into the DOM
         function escapeHtml(unsafe) {
             return String(unsafe)
                 .replace(/&/g, "&amp;")
@@ -530,11 +545,9 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // expose delete functions for debugging (not used in markup)
         window.deleteUser = deleteUser;
         window.deleteTrip = deleteTrip;
 
-        // Initialize app on load
         window.addEventListener('load', initializeFirebase);
     </script>
 </body>
