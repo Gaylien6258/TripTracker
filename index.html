@@ -196,39 +196,49 @@
         let users = []; // In-memory cache for users
 
         async function initializeFirebase() {
-            if (!firebaseConfig) {
-                console.error("Firebase config is not available.");
-                showModal("Firebase is not configured. The app will not function correctly.");
-                // still set up UI handlers so the UI doesn't completely break
-                setupEventListeners();
-                return;
-            }
+    if (!firebaseConfig) {
+        console.error("Firebase config is not available.");
+        showModal("Firebase is not configured. The app will not function correctly.");
+        // still set up UI handlers so the UI doesn't completely break
+        setupEventListeners();
+        return;
+    }
 
-            try {
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
+    try {
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
 
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                userId = auth.currentUser ? auth.currentUser.uid : 'unknown';
+        // Use onAuthStateChanged to handle the user state change reliably.
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in.
+                userId = user.uid;
                 document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
                 console.log("User authenticated with ID:", userId);
-
-                // Set up real-time listeners for users and trips
+                // Now that we have a user, set up the database listeners.
                 setupRealtimeListeners();
-                setupEventListeners();
-            } catch (error) {
-                console.error("Error during Firebase initialization or authentication:", error);
-                showModal("Could not connect to Firebase. Please check the console for details.");
-                // Still allow event listeners (for local testing)
-                setupEventListeners();
+            } else {
+                // No user is signed in, so we sign in anonymously
+                if (initialAuthToken) {
+                    signInWithCustomToken(auth, initialAuthToken).catch(err => {
+                        console.error("Custom token sign-in failed:", err);
+                        signInAnonymously(auth);
+                    });
+                } else {
+                    signInAnonymously(auth);
+                }
             }
-        }
+        });
+
+        // Set up UI event listeners immediately, as they don't depend on Firebase
+        setupEventListeners();
+    } catch (error) {
+        console.error("Error during Firebase initialization or authentication:", error);
+        showModal("Could not connect to Firebase. Please check the console for details.");
+        setupEventListeners();
+    }
+}
 
         // ---------- UI Helpers ----------
         function switchTab(tabName) {
