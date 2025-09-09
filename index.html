@@ -84,6 +84,32 @@
         .delete-btn:hover {
             background-color: #dc2626;
         }
+        .archive-btn {
+            background-color: #10b981;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: 500;
+            border: none;
+        }
+        .archive-btn:hover {
+            background-color: #059669;
+        }
+        .restore-btn {
+            background-color: #3b82f6;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: 500;
+            border: none;
+        }
+        .restore-btn:hover {
+            background-color: #2563eb;
+        }
         /* modal layout */
         .modal-flex {
             display: flex;
@@ -103,12 +129,23 @@
             color: #166534;
             margin-bottom: 1rem;
         }
+        .backup-section {
+            background-color: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
     <div class="container">
         <h1 class="text-4xl font-bold text-center mb-8">Trip Tracker</h1>
-        <p id="userIdDisplay" class="text-center text-sm text-gray-500 mb-4"></p>
+        <p class="text-center text-sm text-gray-500 mb-4">Data stored locally in your browser (persists on refresh/close). Use Archive to backup!</p>
 
         <!-- Tabs -->
         <div class="flex">
@@ -144,6 +181,13 @@
 
             <h2 class="text-2xl font-bold mt-8 mb-4">Logged Trips</h2>
             <ul id="tripsList" class="item-list"></ul>
+
+            <h3 class="text-xl font-bold mt-8 mb-2">Backup / Restore Data</h3>
+            <div class="backup-section">
+                <button id="archiveBtn" class="archive-btn">Archive Data (Download Backup)</button>
+                <input type="file" id="restoreFileInput" accept=".json" style="display: none;">
+                <button id="restoreBtn" class="restore-btn">Restore from File</button>
+            </div>
         </div>
 
         <!-- Users Section -->
@@ -186,77 +230,20 @@
         <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-lg text-center">
             <p id="modalMessage" class="mb-4 text-lg"></p>
             <div id="modalButtons" class="flex justify-center gap-4">
-                <button id="modalConfirm" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">Yes</button>
-                <button id="modalClose" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors">No</button>
+                <button id="modalConfirm" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors hidden">Yes</button>
+                <button id="modalClose" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors">OK</button>
             </div>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <script>
+        // Local Storage Keys
+        const USERS_KEY = 'tripTrackerUsers';
+        const TRIPS_KEY = 'tripTrackerTrips';
 
-        setLogLevel('debug');
-
-        // --- Firebase Setup ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        let firebaseConfig = null;
-        try {
-            if (typeof __firebase_config !== 'undefined') {
-                firebaseConfig = JSON.parse(__firebase_config);
-            }
-        } catch (err) {
-            console.error('Failed to parse __firebase_config:', err);
-            firebaseConfig = null;
-        }
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db = null, auth = null, userId = null;
-        let users = [];
-        let trips = [];
-
-        async function initializeFirebase() {
-            if (!firebaseConfig) {
-                console.error("Firebase config is not available.");
-                showModal("Firebase is not configured. The app will not function correctly.", false);
-                setupEventListeners();
-                return;
-            }
-
-            try {
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
-                        console.log("User authenticated with ID:", userId);
-                        setupRealtimeListeners();
-                    } else {
-                        if (initialAuthToken) {
-                            try {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                            } catch (err) {
-                                console.error("Custom token sign-in failed:", err);
-                                await signInAnonymously(auth);
-                            }
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    }
-                });
-
-                setupEventListeners();
-            } catch (error) {
-                console.error("Error during Firebase initialization or authentication:", error);
-                showModal("Could not connect to Firebase. Please check the console for details.", false);
-                setupEventListeners();
-            }
-        }
+        // Global Data
+        let users = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
+        let trips = JSON.parse(localStorage.getItem(TRIPS_KEY)) || [];
 
         // ---------- UI Helpers ----------
         function switchTab(tabName) {
@@ -278,13 +265,13 @@
                 }
             });
         }
-        
+
         function showModal(message, isConfirmation = false, onConfirmCallback = null) {
             const modal = document.getElementById('modal');
             const modalMessage = document.getElementById('modalMessage');
             const modalConfirmBtn = document.getElementById('modalConfirm');
             const modalCloseBtn = document.getElementById('modalClose');
-            
+
             modalMessage.textContent = message;
 
             if (isConfirmation) {
@@ -307,7 +294,73 @@
             modal.classList.add('hidden');
         }
 
-        // ---------- Event listeners (single place) ----------
+        // ---------- Save to LocalStorage ----------
+        function saveData() {
+            localStorage.setItem(USERS_KEY, JSON.stringify(users));
+            localStorage.setItem(TRIPS_KEY, JSON.stringify(trips));
+        }
+
+        // ---------- Backup / Restore Functions ----------
+        function archiveData() {
+            const backupData = {
+                users: users,
+                trips: trips,
+                exportDate: new Date().toISOString()
+            };
+            const filename = `trip-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+            const dataStr = JSON.stringify(backupData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showModal('Backup file downloaded successfully!');
+        }
+
+        function restoreData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const backupData = JSON.parse(e.target.result);
+                    if (!backupData.users || !Array.isArray(backupData.users) || !backupData.trips || !Array.isArray(backupData.trips)) {
+                        throw new Error('Invalid backup file: Missing users or trips array.');
+                    }
+
+                    // Merge users: Add only new ones (by ID)
+                    const existingUserIds = new Set(users.map(u => u.id));
+                    const newUsers = backupData.users.filter(u => !existingUserIds.has(u.id));
+                    users = [...users, ...newUsers];
+
+                    // Merge trips: Add only new ones (by ID)
+                    const existingTripIds = new Set(trips.map(t => t.id));
+                    const newTrips = backupData.trips.filter(t => !existingTripIds.has(t.id));
+                    trips = [...trips, ...newTrips];
+
+                    // Sort trips by timestamp (newest first)
+                    trips.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                    saveData();
+                    displayUsers();
+                    displayTrips();
+                    renderTripUserCheckboxes();
+                    showModal(`Restored successfully! Added ${newUsers.length} users and ${newTrips.length} trips.`);
+                } catch (error) {
+                    console.error('Restore error:', error);
+                    showModal(`Failed to restore: ${error.message}. Please check the file.`);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset input for next use
+        }
+
+        // ---------- Event listeners ----------
         function setupEventListeners() {
             document.getElementById('tripsTab').addEventListener('click', () => switchTab('trips'));
             document.getElementById('usersTab').addEventListener('click', () => switchTab('users'));
@@ -315,9 +368,16 @@
 
             document.getElementById('modalClose').addEventListener('click', hideModal);
 
+            document.getElementById('archiveBtn').addEventListener('click', archiveData);
+
+            const restoreBtn = document.getElementById('restoreBtn');
+            const restoreFileInput = document.getElementById('restoreFileInput');
+            restoreBtn.addEventListener('click', () => restoreFileInput.click());
+            restoreFileInput.addEventListener('change', restoreData);
+
             const userForm = document.getElementById('userForm');
             if (userForm) {
-                userForm.addEventListener('submit', async (e) => {
+                userForm.addEventListener('submit', (e) => {
                     e.preventDefault();
                     const userNameEl = document.getElementById('userName');
                     if (!userNameEl) return;
@@ -326,27 +386,23 @@
                         showModal('Please enter a user name.');
                         return;
                     }
-                    if (!db) {
-                        showModal('Not connected to Firestore. Unable to add user.');
-                        return;
-                    }
-                    const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
-                    try {
-                        await addDoc(usersCollectionRef, {
-                            name: userName,
-                            timestamp: serverTimestamp()
-                        });
-                        e.target.reset();
-                    } catch (error) {
-                        console.error("Error adding user:", error);
-                        showModal("Failed to add user. Please check your internet connection.");
-                    }
+                    const newUser = {
+                        id: Date.now().toString(), // Simple unique ID
+                        name: userName,
+                        timestamp: new Date().toISOString()
+                    };
+                    users.push(newUser);
+                    saveData();
+                    userForm.reset();
+                    displayUsers();
+                    renderTripUserCheckboxes();
+                    showModal('User added successfully!');
                 });
             }
 
             const tripForm = document.getElementById('tripForm');
             if (tripForm) {
-                tripForm.addEventListener('submit', async (e) => {
+                tripForm.addEventListener('submit', (e) => {
                     e.preventDefault();
                     const destination = document.getElementById('tripDestination')?.value?.trim() || '';
                     const milesRaw = document.getElementById('tripMiles')?.value;
@@ -359,25 +415,21 @@
                         showModal("Please select at least one responsible user.");
                         return;
                     }
-                    if (!db) {
-                        showModal('Not connected to Firestore. Unable to add trip.');
-                        return;
-                    }
-                    const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
-                    try {
-                        await addDoc(tripsCollectionRef, {
-                            destination,
-                            miles,
-                            notes,
-                            users: selectedUserIds,
-                            timestamp: serverTimestamp()
-                        });
-                        e.target.reset();
-                        selectedUserCheckboxes.forEach(cb => cb.checked = false);
-                    } catch (error) {
-                        console.error("Error adding trip:", error);
-                        showModal("Failed to add trip. Please check your internet connection.");
-                    }
+                    const newTrip = {
+                        id: Date.now().toString(), // Simple unique ID
+                        destination,
+                        miles,
+                        notes,
+                        users: selectedUserIds,
+                        timestamp: new Date().toISOString()
+                    };
+                    trips.push(newTrip);
+                    trips.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort newest first
+                    saveData();
+                    tripForm.reset();
+                    selectedUserCheckboxes.forEach(cb => cb.checked = false);
+                    displayTrips();
+                    showModal('Trip added successfully!');
                 });
             }
 
@@ -392,75 +444,31 @@
                         showModal('Please enter valid, positive numbers for gas price and MPG.');
                         return;
                     }
-                    
+
                     generateReport(gasPrice, avgMpg);
                 });
             }
         }
-        
-        // ---------- Firestore realtime listeners ----------
-        function setupRealtimeListeners() {
-            if (!db) {
-                console.warn('Firestore not initialized; skipping realtime listeners.');
+
+        // ---------- Local Data Helpers ----------
+        function deleteUser(userIdToDelete) {
+            const tripsWithUser = trips.filter(trip => trip.users.includes(userIdToDelete));
+            if (tripsWithUser.length > 0) {
+                showModal(`Cannot delete user. This user is associated with ${tripsWithUser.length} trip(s).`, false);
                 return;
             }
-
-            // Listen for user data and update the global users array
-            const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
-            onSnapshot(usersCollectionRef, (userSnapshot) => {
-                users = userSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                displayUsers();
-                renderTripUserCheckboxes();
-            }, (error) => {
-                console.error("Error getting users data: ", error);
-            });
-
-            // Listen for trip data and update the global trips array
-            const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
-            onSnapshot(tripsCollectionRef, (tripSnapshot) => {
-                trips = tripSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                trips.sort((a, b) => {
-                    const aTime = a.timestamp && typeof a.timestamp.toMillis === 'function' ? a.timestamp.toMillis() : 0;
-                    const bTime = b.timestamp && typeof b.timestamp.toMillis === 'function' ? b.timestamp.toMillis() : 0;
-                    return bTime - aTime;
-                });
-                displayTrips(trips);
-            }, (error) => {
-                console.error("Error getting trips data: ", error);
-            });
+            users = users.filter(user => user.id !== userIdToDelete);
+            saveData();
+            displayUsers();
+            renderTripUserCheckboxes();
+            showModal('User deleted successfully!');
         }
 
-        // ---------- Firestore write helpers ----------
-        async function deleteUser(userIdToDelete) {
-            if (!db) {
-                showModal('Not connected to Firestore. Cannot delete user.', false);
-                return;
-            }
-            try {
-                // Check for associated trips before deleting user
-                const tripsWithUser = trips.filter(trip => trip.users.includes(userIdToDelete));
-                if (tripsWithUser.length > 0) {
-                    showModal(`Cannot delete user. This user is associated with ${tripsWithUser.length} trip(s).`, false);
-                    return;
-                }
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userIdToDelete));
-            } catch (error) {
-                console.error("Error deleting user:", error);
-                showModal("Failed to delete user. Please try again.", false);
-            }
-        }
-
-        async function deleteTrip(tripId) {
-            if (!db) {
-                showModal('Not connected to Firestore. Cannot delete trip.', false);
-                return;
-            }
-            try {
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/trips`, tripId));
-            } catch (error) {
-                console.error("Error deleting trip:", error);
-                showModal("Failed to delete trip. Please try again.", false);
-            }
+        function deleteTrip(tripId) {
+            trips = trips.filter(trip => trip.id !== tripId);
+            saveData();
+            displayTrips();
+            showModal('Trip deleted successfully!');
         }
 
         // ---------- UI render functions ----------
@@ -505,21 +513,18 @@
             });
         }
 
-        function displayTrips(tripsToDisplay) {
+        function displayTrips() {
             const tripsListElement = document.getElementById('tripsList');
             if (!tripsListElement) return;
             tripsListElement.innerHTML = '';
 
-            tripsToDisplay.forEach(trip => {
+            trips.forEach(trip => {
                 const responsibleUserNames = Array.isArray(trip.users) ? trip.users.map(userId => {
                     const u = users.find(x => x.id === userId);
                     return u ? u.name : 'Unknown User';
                 }).join(', ') : 'N/A';
 
-                let dateStr = 'Unknown date';
-                if (trip.timestamp && typeof trip.timestamp.toDate === 'function') {
-                    dateStr = new Date(trip.timestamp.toDate()).toLocaleString();
-                }
+                const dateStr = new Date(trip.timestamp).toLocaleString();
 
                 const li = document.createElement('li');
                 li.className = 'flex justify-between items-start';
@@ -546,7 +551,7 @@
         function generateReport(gasPrice, avgMpg) {
             const reportContainer = document.getElementById('reportContainer');
             if (!reportContainer) return;
-            
+
             const totalMiles = trips.reduce((sum, trip) => sum + (trip.miles || 0), 0);
             const totalGallons = totalMiles / avgMpg;
             const estimatedTotalCost = totalGallons * gasPrice;
@@ -559,7 +564,7 @@
                     <p><strong>Estimated Total Fuel Cost:</strong> $${estimatedTotalCost.toFixed(2)}</p>
                 </div>
             `;
-            
+
             // Generate user-specific cost breakdown
             const userCosts = users.reduce((acc, user) => {
                 acc[user.id] = { name: user.name, miles: 0, cost: 0 };
@@ -599,7 +604,16 @@
                 .replace(/'/g, "&#039;");
         }
 
-        window.addEventListener('load', initializeFirebase);
+        // ---------- Initialize App ----------
+        function initializeApp() {
+            setupEventListeners();
+            displayUsers();
+            displayTrips();
+            renderTripUserCheckboxes();
+            switchTab('trips'); // Default tab
+        }
+
+        window.addEventListener('load', initializeApp);
     </script>
 </body>
 </html>
