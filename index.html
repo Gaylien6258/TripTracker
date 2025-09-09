@@ -261,7 +261,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase Config (your specific Trip Tracker project)
         const appId = 'trip-tracker-de1de';
@@ -388,7 +388,7 @@
                 showModal('User deleted successfully!');
             } catch (error) {
                 console.error("Error deleting user:", error);
-                showModal("Failed to delete user.", false);
+                showModal(`Failed to delete user: ${error.message}`, false);
             }
         }
 
@@ -399,7 +399,7 @@
                 showModal('Trip deleted successfully!');
             } catch (error) {
                 console.error("Error deleting trip:", error);
-                showModal("Failed to delete trip.", false);
+                showModal(`Failed to delete trip: ${error.message}`, false);
             }
         }
 
@@ -413,7 +413,7 @@
                 showModal('Trip updated successfully!');
             } catch (error) {
                 console.error("Error updating trip:", error);
-                showModal("Failed to update trip.", false);
+                showModal(`Failed to update trip: ${error.message}`, false);
             }
         }
 
@@ -504,8 +504,8 @@
                     const u = users.find(x => x.id === userId);
                     return u ? u.name : 'Unknown User';
                 }).join(', ') : 'N/A';
-                const dateStr = new Date(trip.timestamp).toLocaleString();
-                const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ')})` : '';
+                const dateStr = trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown';
+                const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
 
                 const li = document.createElement('li');
                 li.className = 'flex justify-between items-start';
@@ -563,7 +563,7 @@
                         </div>
                         <div class="input-group">
                             <label for="editTripDateTime">Date and Time</label>
-                            <input type="datetime-local" id="editTripDateTime" value="${new Date(trip.timestamp).toISOString().slice(0, 16)}" required>
+                            <input type="datetime-local" id="editTripDateTime" value="${trip.timestamp ? new Date(trip.timestamp).toISOString().slice(0, 16) : ''}" required>
                         </div>
                         <div class="input-group">
                             <label for="editTripNotes">Notes</label>
@@ -725,9 +725,9 @@
                 y += 10;
                 tripsToInclude.forEach((trip, index) => {
                     const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
-                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ')})` : '';
+                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
                     doc.text(`${index + 1}. ${trip.destination || 'No destination'} ${sharedNote}`, 10, y);
-                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${new Date(trip.timestamp).toLocaleString()}`, 10, y + 5);
+                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown'}`, 10, y + 5);
                     y += 15;
                 });
             }
@@ -747,7 +747,7 @@
                 reportHtml += `<ul class="item-list">`;
                 tripsToInclude.forEach(trip => {
                     const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
-                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ')})` : '';
+                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
                     reportHtml += `
                         <li class="flex justify-between items-start">
                             <div>
@@ -756,7 +756,7 @@
                                 <p class="text-sm text-gray-500">Gas Price: $${escapeHtml(String(trip.gasPrice ?? 'N/A'))}</p>
                                 <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
                                 <p class="text-sm text-gray-500">Notes: ${escapeHtml(trip.notes || 'N/A')}</p>
-                                <p class="text-sm text-gray-500">Date: ${escapeHtml(new Date(trip.timestamp).toLocaleString())}</p>
+                                <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown')}</p>
                                 <p class="text-sm text-gray-500">Status: ${trip.paid ? 'Paid' : 'Unpaid'}</p>
                             </div>
                         </li>
@@ -806,7 +806,7 @@
                         showModal('User added successfully!');
                     } catch (error) {
                         console.error("Error adding user:", error);
-                        showModal("Failed to add user.");
+                        showModal(`Failed to add user: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
                     }
                 });
             }
@@ -819,7 +819,12 @@
                     const milesRaw = document.getElementById('tripMiles')?.value;
                     const miles = milesRaw ? parseFloat(milesRaw) : 0;
                     const gasPrice = parseFloat(document.getElementById('tripGasPrice')?.value) || null;
-                    const timestamp = document.getElementById('tripDateTime')?.value;
+                    const timestampStr = document.getElementById('tripDateTime')?.value;
+                    if (!timestampStr) {
+                        showModal('Please select a date and time.');
+                        return;
+                    }
+                    const timestamp = new Date(timestampStr).toISOString();
                     const notes = document.getElementById('tripNotes')?.value?.trim() || '';
                     const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
                     const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
@@ -871,7 +876,7 @@
                         showModal('Trip added successfully!');
                     } catch (error) {
                         console.error("Error adding trip:", error);
-                        showModal("Failed to add trip.");
+                        showModal(`Failed to add trip: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
                     }
                 });
             }
@@ -896,10 +901,11 @@
 
                     generateReport(selectedUserIds, gasPrice, avgMpg);
                     const unpaidTrips = trips.filter(trip => selectedUserIds.some(id => trip.users.includes(id)) && !trip.paid);
-                    showModal(`Confirm payment of $${unpaidTrips.reduce((sum, trip) => {
+                    const totalCost = unpaidTrips.reduce((sum, trip) => {
                         const tripGasPrice = trip.gasPrice || gasPrice;
                         return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
-                    }, 0).toFixed(2)} for ${selectedUserIds.length} user(s)?`, true, async () => {
+                    }, 0);
+                    showModal(`Confirm payment of $${totalCost.toFixed(2)} for ${selectedUserIds.length} user(s)?`, true, async () => {
                         try {
                             for (const trip of unpaidTrips) {
                                 await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, trip.id), { paid: true });
@@ -908,7 +914,7 @@
                             showModal('Payment completed and PDF generated!');
                         } catch (error) {
                             console.error("Error marking trips as paid:", error);
-                            showModal("Failed to complete payment.");
+                            showModal(`Failed to complete payment: ${error.message || error.code || 'Unknown error.'}`, false);
                         }
                     });
                 });
@@ -936,6 +942,7 @@
                         filteredTrips = filteredTrips.filter(trip => trip.users.includes(selectedUserId));
                     }
                     filteredTrips = filteredTrips.filter(trip => {
+                        if (!trip.timestamp) return false;
                         const tripDate = new Date(trip.timestamp);
                         return tripDate >= start && tripDate <= end;
                     });
