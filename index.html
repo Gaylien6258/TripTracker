@@ -266,92 +266,95 @@
 
         // ---------- Event listeners (single place) ----------
         function setupEventListeners() {
-            // Tabs
-            document.getElementById('tripsTab').addEventListener('click', () => switchTab('trips'));
-            document.getElementById('usersTab').addEventListener('click', () => switchTab('users'));
-            document.getElementById('fillupTab').addEventListener('click', () => switchTab('fillup'));
+    // Tab switching logic
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.id.replace('Tab', '');
+            switchTab(tabId);
+        });
+    });
 
-            // User form submit
-            const userForm = document.getElementById('userForm');
-            if (userForm) {
-                userForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const userNameEl = document.getElementById('userName');
-                    if (!userNameEl) return;
-                    const userName = userNameEl.value.trim();
-                    if (!userName) {
-                        showModal('Please enter a user name.');
-                        return;
-                    }
-                    if (!db) {
-                        showModal('Not connected to Firestore. Unable to add user.');
-                        return;
-                    }
-                    const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
-                    try {
-                        await addDoc(usersCollectionRef, {
-                            name: userName,
-                            timestamp: serverTimestamp()
-                        });
-                        e.target.reset();
-                    } catch (error) {
-                        console.error("Error adding user:", error);
-                        showModal("Failed to add user. Please check your internet connection.");
-                    }
-                });
+    // User form submit
+    const userForm = document.getElementById('userForm');
+    if (userForm) {
+        userForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userNameEl = document.getElementById('userName');
+            if (!userNameEl) return;
+            const userName = userNameEl.value.trim();
+            if (!userName) {
+                showModal('Please enter a user name.');
+                return;
             }
-
-            // Trip form submit
-            const tripForm = document.getElementById('tripForm');
-            if (tripForm) {
-                tripForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const destination = document.getElementById('tripDestination')?.value?.trim() || '';
-                    const milesRaw = document.getElementById('tripMiles')?.value;
-                    const miles = milesRaw ? parseFloat(milesRaw) : 0;
-                    const notes = document.getElementById('tripNotes')?.value?.trim() || '';
-
-                    // collect selected users
-                    const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
-                    const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
-
-                    if (selectedUserIds.length === 0) {
-                        showModal("Please select at least one responsible user.");
-                        return;
-                    }
-                    if (!db) {
-                        showModal('Not connected to Firestore. Unable to add trip.');
-                        return;
-                    }
-                    const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
-                    try {
-                        await addDoc(tripsCollectionRef, {
-                            destination,
-                            miles,
-                            notes,
-                            users: selectedUserIds,
-                            timestamp: serverTimestamp()
-                        });
-                        e.target.reset();
-                        selectedUserCheckboxes.forEach(cb => cb.checked = false);
-                    } catch (error) {
-                        console.error("Error adding trip:", error);
-                        showModal("Failed to add trip. Please check your internet connection.");
-                    }
-                });
+            if (!db) {
+                showModal('Not connected to Firestore. Unable to add user.');
+                return;
             }
-
-            // Fill-up form (placeholder behavior — you can customize further)
-            const fillupForm = document.getElementById('fillupForm');
-            if (fillupForm) {
-                fillupForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const gasPrice = document.getElementById('gasPrice')?.value;
-                    const avgMpg = document.getElementById('avgMpg')?.value;
-                    showModal(`Report generated (placeholder)\nGas: ${gasPrice}\nMPG: ${avgMpg}`);
+            const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
+            try {
+                await addDoc(usersCollectionRef, {
+                    name: userName,
+                    timestamp: serverTimestamp()
                 });
+                e.target.reset();
+            } catch (error) {
+                console.error("Error adding user:", error);
+                showModal("Failed to add user. Please check your internet connection.");
             }
-        }
+        });
+    }
+
+    // Trip form submit
+    const tripForm = document.getElementById('tripForm');
+    if (tripForm) {
+        tripForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const destination = document.getElementById('tripDestination')?.value?.trim() || '';
+            const milesRaw = document.getElementById('tripMiles')?.value;
+            const miles = milesRaw ? parseFloat(milesRaw) : 0;
+            const notes = document.getElementById('tripNotes')?.value?.trim() || '';
+
+            // collect selected users
+            const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
+            const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
+
+            if (selectedUserIds.length === 0) {
+                showModal("Please select at least one responsible user.");
+                return;
+            }
+            if (!db) {
+                showModal('Not connected to Firestore. Unable to add trip.');
+                return;
+            }
+            const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
+            try {
+                await addDoc(tripsCollectionRef, {
+                    destination,
+                    miles,
+                    notes,
+                    users: selectedUserIds,
+                    timestamp: serverTimestamp()
+                });
+                e.target.reset();
+                selectedUserCheckboxes.forEach(cb => cb.checked = false);
+            } catch (error) {
+                console.error("Error adding trip:", error);
+                showModal("Failed to add trip. Please check your internet connection.");
+            }
+        });
+    }
+
+    // Fill-up form (placeholder behavior — you can customize further)
+    const fillupForm = document.getElementById('fillupForm');
+    if (fillupForm) {
+        fillupForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const gasPrice = document.getElementById('gasPrice')?.value;
+            const avgMpg = document.getElementById('avgMpg')?.value;
+            showModal(`Report generated (placeholder)\nGas: ${gasPrice}\nMPG: ${avgMpg}`);
+        });
+    }
+}
 
         // ---------- Firestore realtime listeners ----------
         function setupRealtimeListeners() {
