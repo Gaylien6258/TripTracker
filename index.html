@@ -274,12 +274,12 @@
                     </div>
                 </div>
                 <div class="input-group">
-                    <label for="startDate">Start Date</label>
-                    <input type="date" id="startDate" required>
+                    <label for="startDate">Start Date (Optional)</label>
+                    <input type="date" id="startDate">
                 </div>
                 <div class="input-group">
-                    <label for="endDate">End Date</label>
-                    <input type="date" id="endDate" required>
+                    <label for="endDate">End Date (Optional)</label>
+                    <input type="date" id="endDate">
                 </div>
                 <button type="submit" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors">Search Trips</button>
                 <button id="resetDatesBtn" type="button" class="w-full bg-gradient-to-r from-red-400 to-red-500 text-white font-bold py-3 rounded-lg hover:from-red-500 hover:to-red-600 transition-colors mt-2">Reset Dates</button>
@@ -541,7 +541,31 @@
             const selectAll = document.getElementById('selectAllSearchUsers');
             selectAll.addEventListener('change', () => {
                 document.querySelectorAll('input[name="searchUser"]').forEach(cb => cb.checked = selectAll.checked);
+                updateSearchResultsOnUserChange();
             });
+            document.querySelectorAll('input[name="searchUser"]').forEach(cb => {
+                cb.addEventListener('change', updateSearchResultsOnUserChange);
+            });
+        }
+
+        function updateSearchResultsOnUserChange() {
+            const selectedUserCheckboxes = document.querySelectorAll('input[name="searchUser"]:checked');
+            const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
+            const startDateStr = document.getElementById('startDate')?.value;
+            const endDateStr = document.getElementById('endDate')?.value;
+
+            let filteredTrips = trips.filter(trip => {
+                if (selectedUserIds.length > 0 && !selectedUserIds.some(id => trip.users.includes(id))) return false;
+                if (startDateStr && endDateStr) {
+                    const start = new Date(startDateStr + 'T00:00:00');
+                    const end = new Date(endDateStr + 'T23:59:59.999');
+                    const tripDate = new Date(trip.timestamp);
+                    return tripDate >= start && tripDate <= end;
+                }
+                return true; // If no dates, show all for selected users
+            });
+
+            generateSearchReport(filteredTrips);
         }
 
         function displayUsers() {
@@ -699,95 +723,168 @@
             });
         }
 
-        function renderPayTripsAndTotals(selectedUserIds) {
-            const tripsContainer = document.getElementById('payTripsContainer');
-            const totalsContainer = document.getElementById('payTotals');
-            tripsContainer.innerHTML = '';
-            totalsContainer.innerHTML = '';
-            const payNowBtn = document.getElementById('payNowBtn');
-            payNowBtn.disabled = true;
+        function generateReport(selectedUserIds, gasPrice, avgMpg) {
+            const reportContainer = document.getElementById('reportContainer');
+            if (!reportContainer) return;
 
             const unpaidTrips = trips.filter(trip => selectedUserIds.some(id => trip.users.includes(id)) && !trip.paid);
-            if (unpaidTrips.length === 0) {
-                tripsContainer.innerHTML = '<p class="no-users-message">No unpaid trips for selected users.</p>';
-                return;
-            }
+            const totalMiles = unpaidTrips.reduce((sum, trip) => sum + (trip.miles || 0), 0);
+            const totalGallons = totalMiles / avgMpg;
+            const estimatedTotalCost = unpaidTrips.reduce((sum, trip) => {
+                const tripGasPrice = trip.gasPrice || gasPrice;
+                return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
+            }, 0);
 
-            let selectedTripIds = [];
+            let reportHtml = `
+                <div class="report-summary">
+                    <h3 class="text-green-800">Trip Report</h3>
+                    <p><strong>Total Miles Driven:</strong> ${totalMiles.toFixed(2)} miles</p>
+                    <p><strong>Estimated Gallons Used:</strong> ${totalGallons.toFixed(2)} gallons</p>
+                    <p><strong>Estimated Total Fuel Cost:</strong> $${estimatedTotalCost.toFixed(2)}</p>
+                </div>
+            `;
+
+            const userCosts = users.reduce((acc, user) => {
+                if (selectedUserIds.includes(user.id)) {
+                    acc[user.id] = { name: user.name, miles: 0, cost: 0 };
+                }
+                return acc;
+            }, {});
+
             unpaidTrips.forEach(trip => {
-                const tripItem = document.createElement('div');
-                tripItem.className = 'trip-item';
-                tripItem.innerHTML = `
-                    <input type="checkbox" class="trip-checkbox form-checkbox text-blue-600 rounded" data-trip-id="${trip.id}" checked>
-                    <div class="trip-details">
-                        <p class="font-bold">${escapeHtml(trip.destination || 'No destination')}</p>
-                        <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
-                        <p class="text-sm text-gray-500">Gas Price: $${escapeHtml(String(trip.gasPrice ?? 'N/A'))}</p>
-                        <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown')}</p>
-                    </div>
-                `;
-                tripsContainer.appendChild(tripItem);
-            });
-
-            function updateTotals() {
-                const gasPrice = parseFloat(document.getElementById('gasPrice')?.value) || 0;
-                const avgMpg = parseFloat(document.getElementById('avgMpg')?.value) || 0;
-                selectedTripIds = Array.from(tripsContainer.querySelectorAll('.trip-checkbox:checked')).map(cb => cb.dataset.tripId);
-
-                let totalMiles = 0;
-                let totalGallons = 0;
-                let totalCost = 0;
-                unpaidTrips.forEach(trip => {
-                    if (selectedTripIds.includes(trip.id)) {
-                        const tripMiles = trip.miles || 0;
-                        totalMiles += tripMiles;
-                        const tripGasPrice = trip.gasPrice || gasPrice;
-                        totalGallons += tripMiles / avgMpg;
-                        totalCost += (tripMiles / avgMpg) * tripGasPrice;
+                if (!trip.users || trip.users.length === 0) return;
+                const milesPerUser = (trip.miles || 0) / trip.users.length;
+                const tripGasPrice = trip.gasPrice || gasPrice;
+                trip.users.forEach(userId => {
+                    if (userCosts[userId]) {
+                        userCosts[userId].miles += milesPerUser;
+                        userCosts[userId].cost += (milesPerUser / avgMpg * tripGasPrice);
                     }
                 });
+            });
 
-                totalsContainer.innerHTML = `
-                    <p>Total Miles: ${totalMiles.toFixed(2)}</p>
-                    <p>Total Gallons: ${avgMpg > 0 ? totalGallons.toFixed(2) : 'Undefined'}</p>
-                    <p>Total Cost: $${gasPrice > 0 && avgMpg > 0 ? totalCost.toFixed(2) : 'Undefined'}</p>
-                `;
+            reportHtml += `<h3 class="mt-8 text-green-800 font-bold text-xl">Individual Cost Breakdown</h3>`;
+            reportHtml += `<ul class="list-disc ml-6 mt-4 space-y-2">`;
+            for (const userId in userCosts) {
+                const user = userCosts[userId];
+                reportHtml += `<li><strong>${escapeHtml(user.name)}:</strong> ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})</li>`;
+            }
+            reportHtml += `</ul>`;
+            reportHtml += `<button id="createPdfBtn" class="pdf-btn mt-4">Create PDF</button>`;
 
-                payNowBtn.disabled = !(gasPrice > 0 && avgMpg > 0 && selectedTripIds.length > 0);
+            reportContainer.innerHTML = reportHtml;
+            reportContainer.classList.remove('hidden');
+
+            document.getElementById('createPdfBtn').addEventListener('click', () => {
+                generateTripReportPdf(unpaidTrips, selectedUserIds, gasPrice, avgMpg, false);
+            });
+        }
+
+        function generateTripReportPdf(tripsToInclude, selectedUserIds, gasPrice, avgMpg, isPayment = false) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(16);
+            doc.text(isPayment ? 'Trip Payment Report' : 'Trip Report', 10, 10);
+
+            const totalMiles = tripsToInclude.reduce((sum, trip) => sum + (trip.miles || 0), 0);
+            const totalGallons = totalMiles / avgMpg;
+            const estimatedTotalCost = tripsToInclude.reduce((sum, trip) => {
+                const tripGasPrice = trip.gasPrice || gasPrice;
+                return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
+            }, 0);
+
+            doc.setFontSize(12);
+            doc.text(`Total Miles Driven: ${totalMiles.toFixed(2)} miles`, 10, 20);
+            doc.text(`Estimated Gallons Used: ${totalGallons.toFixed(2)} gallons`, 10, 30);
+            doc.text(`Estimated Total Fuel Cost: $${estimatedTotalCost.toFixed(2)}`, 10, 40);
+
+            if (isPayment) {
+                doc.text(`Paid On: ${new Date().toLocaleString()}`, 10, 50);
+                y = 60;
+            } else {
+                y = 50;
             }
 
-            tripsContainer.querySelectorAll('.trip-checkbox').forEach(cb => {
-                cb.addEventListener('change', updateTotals);
-            });
-            document.getElementById('gasPrice').addEventListener('input', updateTotals);
-            document.getElementById('avgMpg').addEventListener('input', updateTotals);
-            payNowBtn.addEventListener('click', () => {
-                if (payNowBtn.disabled) return;
-                const gasPrice = parseFloat(document.getElementById('gasPrice')?.value);
-                const avgMpg = parseFloat(document.getElementById('avgMpg')?.value);
-                const selectedTrips = unpaidTrips.filter(trip => selectedTripIds.includes(trip.id));
-                const totalCost = selectedTrips.reduce((sum, trip) => {
-                    const tripGasPrice = trip.gasPrice || gasPrice;
-                    return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
-                }, 0);
-                showModal(`Confirm payment of $${totalCost.toFixed(2)} for ${selectedTrips.length} trip(s)?`, true, async () => {
-                    try {
-                        for (const trip of selectedTrips) {
-                            await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, trip.id), { paid: true });
-                        }
-                        generateTripReportPdf(selectedTrips, selectedUserIds, gasPrice, avgMpg, true);
-                        showModal('Payment completed and PDF generated!');
-                        tripsContainer.innerHTML = '';
-                        totalsContainer.innerHTML = '';
-                        payNowBtn.disabled = true;
-                    } catch (error) {
-                        console.error("Error marking trips as paid:", error);
-                        showModal(`Failed to complete payment: ${error.message || error.code || 'Unknown error.'}`, false);
+            const userCosts = users.reduce((acc, user) => {
+                if (selectedUserIds.includes(user.id)) {
+                    acc[user.id] = { name: user.name, miles: 0, cost: 0 };
+                }
+                return acc;
+            }, {});
+
+            tripsToInclude.forEach(trip => {
+                if (!trip.users || trip.users.length === 0) return;
+                const milesPerUser = (trip.miles || 0) / trip.users.length;
+                const tripGasPrice = trip.gasPrice || gasPrice;
+                trip.users.forEach(userId => {
+                    if (userCosts[userId]) {
+                        userCosts[userId].miles += milesPerUser;
+                        userCosts[userId].cost += (milesPerUser / avgMpg * tripGasPrice);
                     }
                 });
             });
 
-            updateTotals();
+            doc.text('Individual Cost Breakdown', 10, y);
+            y += 10;
+            for (const userId in userCosts) {
+                const user = userCosts[userId];
+                doc.text(`${user.name}: ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})`, 10, y);
+                y += 10;
+            }
+
+            if (tripsToInclude.length > 0) {
+                doc.text('Trip Details', 10, y);
+                y += 10;
+                tripsToInclude.forEach((trip, index) => {
+                    const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
+                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
+                    doc.text(`${index + 1}. ${trip.destination || 'No destination'} ${sharedNote}`, 10, y);
+                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown'}`, 10, y + 5);
+                    y += 15;
+                });
+            }
+
+            const filename = isPayment ? `trip-payment-${new Date().toISOString().split('T')[0]}.pdf` : `trip-report-${new Date().toISOString().split('T')[0]}.pdf`;
+            doc.save(filename);
+        }
+
+        function generateSearchReport(filteredTrips) {
+            const searchResults = document.getElementById('searchResults');
+            if (!searchResults) return;
+
+            let reportHtml = `<h3 class="text-xl font-bold mt-4">Search Results</h3>`;
+            if (filteredTrips.length === 0) {
+                reportHtml += `<p>No trips found for the selected criteria.</p>`;
+            } else {
+                reportHtml += `<ul class="item-list">`;
+                filteredTrips.forEach(trip => {
+                    const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
+                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
+                    reportHtml += `
+                        <li class="flex justify-between items-start">
+                            <div>
+                                <p class="font-bold">${escapeHtml(trip.destination || 'No destination')} ${sharedNote}</p>
+                                <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
+                                <p class="text-sm text-gray-500">Gas Price: $${escapeHtml(String(trip.gasPrice ?? 'N/A'))}</p>
+                                <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
+                                <p class="text-sm text-gray-500">Notes: ${escapeHtml(trip.notes || 'N/A')}</p>
+                                <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown')}</p>
+                                <p class="text-sm text-gray-500">Status: ${trip.paid ? 'Paid' : 'Unpaid'}</p>
+                            </div>
+                        </li>
+                    `;
+                });
+                reportHtml += `</ul>`;
+                reportHtml += `<button id="searchPdfBtn" class="pdf-btn mt-4">Create PDF</button>`;
+            }
+
+            searchResults.innerHTML = reportHtml;
+            const pdfBtn = document.getElementById('searchPdfBtn');
+            if (pdfBtn) {
+                pdfBtn.addEventListener('click', () => {
+                    generateTripReportPdf(filteredTrips, users.map(u => u.id), 0, 1, false);
+                });
+            }
         }
 
         // ---------- Event Listeners ----------
@@ -916,27 +1013,15 @@
                     const startDateStr = document.getElementById('startDate')?.value;
                     const endDateStr = document.getElementById('endDate')?.value;
 
-                    if (!startDateStr || !endDateStr) {
-                        showModal('Please select both start and end dates.');
-                        return;
-                    }
-
-                    // Fix for same-day search: Set full day range in local time
-                    const start = new Date(startDateStr + 'T00:00:00'); // Start of day
-                    const end = new Date(endDateStr + 'T23:59:59.999'); // End of day
-
-                    console.log('Search range:', start, 'to', end); // Debug log
-
                     let filteredTrips = trips.filter(trip => {
-                        if (!trip.timestamp) return false;
-                        const tripDate = new Date(trip.timestamp);
-                        const inDateRange = tripDate >= start && tripDate <= end;
-                        if (!inDateRange) return false;
-                        // Filter by selected users if any
-                        if (selectedUserIds.length > 0) {
-                            return selectedUserIds.some(id => trip.users.includes(id));
+                        if (selectedUserIds.length > 0 && !selectedUserIds.some(id => trip.users.includes(id))) return false;
+                        if (startDateStr && endDateStr) {
+                            const start = new Date(startDateStr + 'T00:00:00');
+                            const end = new Date(endDateStr + 'T23:59:59.999');
+                            const tripDate = new Date(trip.timestamp);
+                            return tripDate >= start && tripDate <= end;
                         }
-                        return true; // All users if none selected
+                        return true; // If no dates, show all for selected users
                     });
 
                     generateSearchReport(filteredTrips);
@@ -971,3 +1056,4 @@
     </script>
 </body>
 </html>
+```
