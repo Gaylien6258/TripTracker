@@ -1,295 +1,430 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Trip Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        .active-tab {
-            @apply border-b-2 border-blue-500 font-bold text-blue-600;
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #ff0000, #ff9900, #33cc33, #3399ff, #cc33cc);
+            color: #1f2937;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .section-container {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
         }
         .tab-button {
-            @apply py-2 px-4 text-center transition-colors duration-200;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem 0.5rem 0 0;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-weight: 600;
+            background: linear-gradient(45deg, #ff6666, #ffcc66);
+            color: white;
         }
-        .card {
-            @apply bg-white p-6 rounded-lg shadow-lg;
+        .tab-button.active {
+            background: linear-gradient(45deg, #cc33cc, #3399ff);
+            color: white;
+            border-top: 2px solid #cc33cc;
+            border-left: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+            border-bottom: none;
+        }
+        .tab-button:hover {
+            background: linear-gradient(45deg, #ff3333, #ff9933);
         }
         .input-group {
-            @apply flex flex-col space-y-2;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 1rem;
         }
         .input-group label {
-            @apply text-sm font-semibold text-gray-700;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
         }
-        .input-group input, .input-group textarea {
-            @apply p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
+        .input-group input, .input-group textarea, .input-group select {
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            width: 100%;
+            transition: border-color 0.2s;
         }
-        .list-container {
-            @apply mt-4 space-y-4;
+        .input-group input:focus, .input-group textarea:focus, .input-group select:focus {
+            outline: none;
+            border-color: #cc33cc;
+        }
+        .item-list {
+            list-style: none;
+            padding: 0;
         }
         .item-list li {
-            @apply bg-gray-100 p-4 rounded-lg flex justify-between items-center;
+            background-color: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        .delete-btn {
-            @apply text-red-500 hover:text-red-700 transition-colors duration-200;
+        .delete-btn, .edit-btn {
+            background: linear-gradient(45deg, #ff6666, #ffcc66);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            border: none;
+            margin-left: 0.5rem;
         }
-        .edit-btn {
-            @apply text-blue-500 hover:text-blue-700 transition-colors duration-200;
+        .delete-btn:hover, .edit-btn:hover {
+            background: linear-gradient(45deg, #ff3333, #ff9933);
         }
-        .modal {
-            @apply fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center;
+        .pay-btn, .pdf-btn {
+            background: linear-gradient(45deg, #33cc33, #3399ff);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            border: none;
+            margin-left: 0.5rem;
         }
-        .modal-content {
-            @apply relative p-5 border w-96 shadow-lg rounded-md bg-white;
+        .pay-btn:hover, .pdf-btn:hover {
+            background: linear-gradient(45deg, #00cc00, #0066ff);
         }
-        .pdf-btn {
-            @apply bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200;
+        .pay-btn.disabled {
+            background: linear-gradient(45deg, #9ca3af, #9ca3af);
+            cursor: not-allowed;
         }
-        .favorite-btn {
-            @apply text-yellow-500 hover:text-yellow-700 transition-colors duration-200;
+        .modal-flex {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .report-summary {
+            background-color: #f0fdf4;
+            border: 2px solid #4ade80;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        .report-summary h3 {
+            font-weight: bold;
+            font-size: 1.25rem;
+            color: #166534;
+            margin-bottom: 1rem;
+        }
+        .backup-section {
+            background-color: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .select-all {
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .no-users-message {
+            padding: 1rem;
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+        }
+        .user-trip-list {
+            margin-top: 1rem;
+        }
+        .trip-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .trip-item:last-child {
+            border-bottom: none;
+        }
+        .trip-checkbox {
+            margin-right: 1rem;
+        }
+        .trip-details p {
+            margin: 0;
+        }
+        .total-summary {
+            margin-top: 1rem;
+            font-weight: bold;
         }
     </style>
 </head>
-<body class="bg-gray-100 font-sans leading-normal tracking-normal">
-    <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Trip Tracker Admin</h1>
+<body>
+    <div class="container">
+        <h1 class="text-4xl font-bold text-center mb-8 text-white">Trip Tracker</h1>
+        <p class="text-center text-sm text-white mb-4">Data synced via Firebase for phone and computer use.</p>
 
-        <div class="flex justify-center mb-6 border-b border-gray-300">
-            <button id="tripsTab" class="tab-button active-tab">Trips</button>
+        <!-- Tabs -->
+        <div class="flex">
+            <button id="tripsTab" class="tab-button active">Trips</button>
             <button id="usersTab" class="tab-button">Users</button>
             <button id="payTab" class="tab-button">Pay Trip Fees</button>
-            <button id="advancedTab" class="tab-button">Advanced Search</button>
+            <button id="advancedTab" class="tab-button">Advanced</button>
         </div>
 
-        <div id="tripsContent" class="tab-content">
-            <div class="card mb-6">
-                <h2 class="text-2xl font-bold mb-4">Add New Trip</h2>
-                <form id="tripForm" class="space-y-4">
-                    <div class="input-group">
-                        <label>Responsible Users</label>
-                        <div id="tripUsersContainer" class="flex flex-wrap gap-2"></div>
-                        <p class="text-red-500 text-sm italic" id="tripUserError" style="display: none;">Please select at least one user.</p>
+        <!-- Trips Section -->
+        <div id="tripsSection" class="section-container mt-0">
+            <h2 class="text-2xl font-bold mb-4">Log a New Trip</h2>
+            <form id="tripForm" class="space-y-4">
+                <div class="input-group">
+                    <label>Responsible Users</label>
+                    <div id="tripUsersContainer" class="flex flex-wrap gap-2">
+                        <!-- Checkboxes will be dynamically added here -->
                     </div>
+                </div>
+                <div class="input-group">
+                    <label for="tripDestination">Destination</label>
+                    <input type="text" id="tripDestination" placeholder="e.g., San Francisco, CA" required>
+                </div>
+                <div class="input-group">
+                    <label for="tripMiles">Miles Driven</label>
+                    <input type="number" id="tripMiles" placeholder="e.g., 250" required>
+                </div>
+                <div class="input-group">
+                    <label for="tripGasPrice">Gas Price Per Gallon ($) (Optional)</label>
+                    <input type="number" step="0.01" id="tripGasPrice" placeholder="e.g., 3.50, leave blank for default">
+                </div>
+                <div class="input-group">
+                    <label for="tripDateTime">Date and Time</label>
+                    <input type="datetime-local" id="tripDateTime" required>
+                </div>
+                <div class="input-group">
+                    <label for="tripNotes">Notes</label>
+                    <textarea id="tripNotes" placeholder="e.g., Drove to the conference" rows="3"></textarea>
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors">Add Trip</button>
+            </form>
 
-                    <div id="favoritesContainer" style="display:none;" class="input-group">
-                        <label>Favorites</label>
-                        <div id="favoritesList" class="flex flex-wrap gap-2 bg-gray-200 p-2 rounded-lg"></div>
-                    </div>
+            <h2 class="text-2xl font-bold mt-8 mb-4">Logged Trips (Unpaid Only)</h2>
+            <ul id="tripsList" class="item-list"></ul>
+        </div>
 
-                    <div class="input-group">
-                        <label for="tripDestination">Destination</label>
-                        <input type="text" id="tripDestination" required>
+        <!-- Users Section -->
+        <div id="usersSection" class="hidden section-container mt-0">
+            <h2 class="text-2xl font-bold mb-4">Manage Users</h2>
+            <form id="userForm" class="space-y-4 mb-8">
+                <div class="input-group">
+                    <label for="userName">User Name</label>
+                    <input type="text" id="userName" placeholder="e.g., John Doe" required>
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors">Add User</button>
+            </form>
+            <h2 class="text-2xl font-bold mb-4">Current Users</h2>
+            <ul id="usersList" class="item-list"></ul>
+        </div>
+
+        <!-- Pay Trip Fees Section -->
+        <div id="paySection" class="hidden section-container mt-0">
+            <h2 class="text-2xl font-bold mb-4">Pay Trip Fees</h2>
+            <form id="payForm" class="space-y-4">
+                <div class="input-group">
+                    <label>Users with Unpaid Trips</label>
+                    <div id="payUsersContainer" class="flex flex-wrap gap-2">
+                        <!-- Checkboxes will be dynamically added here -->
                     </div>
-                    <div class="input-group">
-                        <label for="tripMiles">Miles Driven</label>
-                        <input type="number" id="tripMiles" required>
+                </div>
+                <div id="payTripsContainer" class="user-trip-list"></div>
+                <div id="payTotals" class="total-summary"></div>
+                <div class="input-group">
+                    <label for="gasPrice">Default Gas Price Per Gallon ($)</label>
+                    <input type="number" step="0.01" id="gasPrice" placeholder="e.g., 3.50" required>
+                </div>
+                <div class="input-group">
+                    <label for="avgMpg">Average MPG</label>
+                    <input type="number" step="0.1" id="avgMpg" placeholder="e.g., 25.5" required>
+                </div>
+                <button id="payNowBtn" type="button" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors disabled">Pay Now (Checked Trips Only)</button>
+            </form>
+            <div id="reportContainer" class="hidden"></div>
+        </div>
+
+        <!-- Advanced Section -->
+        <div id="advancedSection" class="hidden section-container mt-0">
+            <h2 class="text-2xl font-bold mb-4">Advanced Search (All Trips, Paid or Unpaid)</h2>
+            <form id="searchForm" class="space-y-4">
+                <div class="input-group">
+                    <label>Users (Optional - Check to Filter)</label>
+                    <div class="select-all flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300">
+                        <input type="checkbox" id="selectAllSearchUsers" class="form-checkbox text-blue-600 rounded">
+                        <span>Select All</span>
                     </div>
-                    <div class="input-group">
-                        <label for="tripGasPrice">Gas Price Per Gallon ($) (Optional)</label>
-                        <input type="number" step="0.01" id="tripGasPrice">
+                    <div id="searchUsersContainer" class="flex flex-wrap gap-2">
+                        <!-- Checkboxes will be dynamically added here -->
                     </div>
-                    <div class="input-group">
-                        <label for="tripDateTime">Date and Time</label>
-                        <input type="datetime-local" id="tripDateTime" required>
-                    </div>
-                    <div class="input-group">
-                        <label for="tripNotes">Notes</label>
-                        <textarea id="tripNotes" rows="3"></textarea>
-                    </div>
-                    <div class="input-group">
-                        <label class="flex items-center space-x-2">
-                            <input type="checkbox" id="favoriteTrip" class="form-checkbox text-blue-600 rounded">
-                            <span>Mark as Favorite</span>
-                        </label>
-                    </div>
-                    <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Add Trip</button>
-                </form>
-            </div>
-            <div class="card">
-                <h2 class="text-2xl font-bold mb-4">Unpaid Trips</h2>
-                <div class="list-container item-list" id="tripsList">
-                    <p class="text-gray-500">No unpaid trips.</p>
+                </div>
+                <div class="input-group">
+                    <label for="startDate">Start Date (Optional)</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="input-group">
+                    <label for="endDate">End Date (Optional)</label>
+                    <input type="date" id="endDate">
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors">Search Trips</button>
+                <button id="resetDatesBtn" type="button" class="w-full bg-gradient-to-r from-red-400 to-red-500 text-white font-bold py-3 rounded-lg hover:from-red-500 hover:to-red-600 transition-colors mt-2">Reset Dates</button>
+            </form>
+            <div id="searchResults" class="mt-4"></div>
+        </div>
+
+        <!-- Custom Modal -->
+        <div id="modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden modal-flex p-4">
+            <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-lg text-center">
+                <p id="modalMessage" class="mb-4 text-lg"></p>
+                <div id="modalButtons" class="flex justify-center gap-4">
+                    <button id="modalConfirm" class="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors hidden">Yes</button>
+                    <button id="modalClose" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors">OK</button>
                 </div>
             </div>
         </div>
 
-        <div id="usersContent" class="tab-content hidden">
-            <div class="card mb-6">
-                <h2 class="text-2xl font-bold mb-4">Add New User</h2>
-                <form id="userForm" class="space-y-4">
-                    <div class="input-group">
-                        <label for="userName">User Name</label>
-                        <input type="text" id="userName" required>
-                    </div>
-                    <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Add User</button>
-                </form>
-            </div>
-            <div class="card">
-                <h2 class="text-2xl font-bold mb-4">Users</h2>
-                <div class="list-container item-list" id="usersList">
-                    <p class="text-gray-500">No users yet.</p>
-                </div>
-            </div>
-        </div>
-
-        <div id="payContent" class="tab-content hidden">
-            <div class="card mb-6">
-                <h2 class="text-2xl font-bold mb-4">Pay Trip Fees</h2>
-                <p class="text-sm text-gray-500 mb-4">Select users below to see their unpaid trips.</p>
-                <div id="payUsersContainer" class="flex flex-wrap gap-2 mb-4"></div>
-                <div id="unpaidTripsContainer" class="list-container item-list mb-4">
-                    <p class="text-gray-500">Select a user to view unpaid trips.</p>
-                </div>
-                <div id="payTotalsContainer" class="bg-gray-100 p-4 rounded-lg hidden">
-                    <p class="font-bold">Total Selected Trips: <span id="totalSelectedTrips">0</span></p>
-                    <p class="font-bold">Total Miles: <span id="totalPayMiles">0</span></p>
-                    <p class="font-bold">Estimated Cost: <span id="totalPayCost"></span></p>
-                </div>
-                <button id="payNowBtn" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 transition-colors mt-4" style="display:none;">Pay Now (checked trips only)</button>
-            </div>
-        </div>
-
-        <div id="advancedContent" class="tab-content hidden">
-            <div class="card mb-6">
-                <h2 class="text-2xl font-bold mb-4">Advanced Search & Reports</h2>
-                <form id="searchForm" class="space-y-4">
-                    <div class="input-group">
-                        <label for="startDate">Start Date</label>
-                        <input type="date" id="startDate">
-                    </div>
-                    <div class="input-group">
-                        <label for="endDate">End Date</label>
-                        <input type="date" id="endDate">
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <button type="button" id="resetDatesBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition-colors">Reset Dates</button>
-                    </div>
-                    <div class="input-group">
-                        <label>Users</label>
-                        <div class="flex items-center space-x-2">
-                            <input type="checkbox" id="selectAllSearchUsers" class="form-checkbox text-blue-600 rounded">
-                            <label for="selectAllSearchUsers">Select All</label>
-                        </div>
-                        <div id="searchUsersContainer" class="flex flex-wrap gap-2"></div>
-                    </div>
-                    <div class="input-group">
-                        <label class="font-semibold text-gray-700">Display Status</label>
-                        <div class="flex items-center space-x-4">
-                            <label class="flex items-center space-x-2">
-                                <input type="checkbox" id="showPaid" checked class="form-checkbox text-blue-600 rounded">
-                                <span>Paid</span>
-                            </label>
-                            <label class="flex items-center space-x-2">
-                                <input type="checkbox" id="showUnpaid" checked class="form-checkbox text-blue-600 rounded">
-                                <span>Unpaid</span>
-                            </label>
-                        </div>
-                    </div>
-                    <button type="submit" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">Search</button>
-                </form>
-            </div>
-            <div class="card mt-6">
-                <h2 class="text-2xl font-bold mb-4">Search Results</h2>
-                <div id="searchResults" class="list-container">
-                    <p class="text-gray-500">Your search results will appear here.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="flex justify-end">
-                <button id="modalClose" class="text-gray-400 hover:text-gray-600 transition-colors">&times;</button>
-            </div>
-            <div id="modalBody" class="mt-2 text-center"></div>
-            <div id="modalActions" class="flex justify-center mt-4 space-x-4">
-                <button id="modalConfirm" class="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg hidden">Confirm</button>
-                <button id="modalCancel" class="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg hidden">Cancel</button>
-            </div>
-        </div>
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, getDocs, query, where } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Global Variables ---
-        let db;
+        // Firebase Config (your specific Trip Tracker project)
+        const appId = 'trip-tracker-de1de';
+        const firebaseConfig = {
+          apiKey: "AIzaSyD4jiHf1fvWDW8vSHLyBRYCdNDXrizx0ms",
+          authDomain: "trip-tracker-de1de.firebaseapp.com",
+          projectId: "trip-tracker-de1de",
+          storageBucket: "trip-tracker-de1de.firebasestorage.app",
+          messagingSenderId: "302935799792",
+          appId: "1:302935799792:web:8b7893586487403a688f35"
+        };
+
+        // Initialize Firebase
+        let db = null, auth = null, userId = null;
         let users = [];
         let trips = [];
-        let favorites = []; // New variable for storing favorites
-        const appId = "my-app-id"; // Placeholder, replace with your actual Firebase App ID
 
-        // --- Firebase Initialization ---
-        function initializeFirebase() {
+        async function initializeFirebase() {
             try {
-                // Your Firebase project configuration
-                const firebaseConfig = {
-                    apiKey: "YOUR_API_KEY",
-                    authDomain: "YOUR_AUTH_DOMAIN",
-                    projectId: "YOUR_PROJECT_ID",
-                    storageBucket: "YOUR_STORAGE_BUCKET",
-                    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-                    appId: "YOUR_APP_ID"
-                };
                 const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
                 db = getFirestore(app);
-                setupRealtimeListeners();
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User authenticated with ID:", userId);
+                        setupRealtimeListeners();
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                });
             } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                showModal(`Failed to initialize Firebase: ${error.message}. Check console for details.`);
+                console.error("Firebase initialization error:", error);
+                showModal("Could not connect to Firebase. Please check the console.", false);
             }
         }
 
-        // --- Firebase Realtime Listeners ---
-        // Refactored to be more efficient. Instead of one big `renderAll()`,
-        // each listener calls a specific function to update only the parts of the UI that need it.
+        // ---------- UI Helpers ----------
+        function switchTab(tabName) {
+            const tabs = {
+                trips: { button: 'tripsTab', section: 'tripsSection' },
+                users: { button: 'usersTab', section: 'usersSection' },
+                pay: { button: 'payTab', section: 'paySection' },
+                advanced: { button: 'advancedTab', section: 'advancedSection' }
+            };
+
+            Object.keys(tabs).forEach(key => {
+                const btn = document.getElementById(tabs[key].button);
+                const sec = document.getElementById(tabs[key].section);
+                if (key === tabName) {
+                    btn.classList.add('active');
+                    sec.classList.remove('hidden');
+                } else {
+                    btn.classList.remove('active');
+                    sec.classList.add('hidden');
+                }
+            });
+        }
+
+        function showModal(message, isConfirmation = false, onConfirmCallback = null) {
+            const modal = document.getElementById('modal');
+            const modalMessage = document.getElementById('modalMessage');
+            const modalConfirmBtn = document.getElementById('modalConfirm');
+            const modalCloseBtn = document.getElementById('modalClose');
+
+            modalMessage.innerHTML = message; // Allow HTML for edit form
+
+            if (isConfirmation) {
+                modalConfirmBtn.classList.remove('hidden');
+                modalCloseBtn.textContent = 'No';
+                modalConfirmBtn.onclick = () => {
+                    hideModal();
+                    if (onConfirmCallback) onConfirmCallback();
+                };
+            } else {
+                modalConfirmBtn.classList.add('hidden');
+                modalCloseBtn.textContent = 'OK';
+                modalCloseBtn.onclick = hideModal;
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function hideModal() {
+            const modal = document.getElementById('modal');
+            modal.classList.add('hidden');
+        }
+
+        // ---------- Firestore Realtime Listeners ----------
         function setupRealtimeListeners() {
             if (!db) return;
 
             const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
             onSnapshot(usersCollectionRef, (userSnapshot) => {
                 users = userSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                // Sort users alphabetically
-                users.sort((a, b) => a.name.localeCompare(b.name));
                 console.log("Users updated:", users.length);
-                updateUIForUsers();
+                renderAll();
             }, (error) => console.error("Error getting users:", error));
 
             const tripsCollectionRef = collection(db, `artifacts/${appId}/public/data/trips`);
             onSnapshot(tripsCollectionRef, (tripSnapshot) => {
                 trips = tripSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                // Sort trips by timestamp in descending order
                 trips.sort((a, b) => {
-                    const aTime = a.timestamp ? a.timestamp.toDate().getTime() : 0;
-                    const bTime = b.timestamp ? b.timestamp.toDate().getTime() : 0;
+                    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
                     return bTime - aTime;
                 });
                 console.log("Trips updated:", trips.length);
-                updateUIForTrips();
+                renderAll();
             }, (error) => console.error("Error getting trips:", error));
         }
 
-        // --- UI Update Functions (Granular Rendering) ---
-        function updateUIForUsers() {
+        function renderAll() {
             displayUsers();
             renderTripUserCheckboxes();
             renderPayUserCheckboxes();
             renderSearchUserCheckboxes();
-        }
-
-        function updateUIForTrips() {
             displayTrips();
-            renderPayUserCheckboxes();
-            renderPayTripsAndTotals([]); // Clears the list
-            generateSearchReport(); // Refresh search results if any
         }
 
-        // --- Data Helpers ---
+        // ---------- Data Helpers ----------
         async function deleteUser(userIdToDelete) {
             if (!db) return;
             const tripsWithUser = trips.filter(trip => trip.users.includes(userIdToDelete));
@@ -320,12 +455,10 @@
         async function updateTrip(tripId, updatedData) {
             if (!db) return;
             try {
-                // Ensure timestamp is always a server timestamp
-                const dataToUpdate = {
+                await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, tripId), {
                     ...updatedData,
-                    timestamp: serverTimestamp()
-                };
-                await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, tripId), dataToUpdate);
+                    timestamp: updatedData.timestamp || serverTimestamp()
+                });
                 showModal('Trip updated successfully!');
             } catch (error) {
                 console.error("Error updating trip:", error);
@@ -333,66 +466,7 @@
             }
         }
 
-        // --- UI Render Functions ---
-
-        // NEW: Handles the new `favorites` feature
-        function renderFavoritesMenu(userId) {
-            const favoritesContainer = document.getElementById('favoritesContainer');
-            const favoritesList = document.getElementById('favoritesList');
-            if (!favoritesContainer || !favoritesList) return;
-
-            favorites = trips.filter(trip => trip.favoriteUsers && trip.favoriteUsers.includes(userId));
-
-            if (favorites.length === 0) {
-                favoritesContainer.style.display = 'none';
-                return;
-            }
-
-            favoritesContainer.style.display = 'block';
-            favoritesList.innerHTML = '';
-
-            favorites.forEach(trip => {
-                const label = document.createElement('label');
-                label.className = 'flex items-center space-x-2 bg-gray-300 px-3 py-1 rounded-lg cursor-pointer hover:bg-gray-400 transition-colors';
-
-                const input = document.createElement('input');
-                input.type = 'checkbox';
-                input.name = 'favoriteTripSelection';
-                input.value = trip.id;
-                input.className = 'form-checkbox text-blue-600 rounded';
-
-                const span = document.createElement('span');
-                span.textContent = escapeHtml(trip.destination);
-
-                label.appendChild(input);
-                label.appendChild(span);
-                favoritesList.appendChild(label);
-            });
-
-            favoritesList.addEventListener('change', (e) => {
-                if (e.target.name === 'favoriteTripSelection') {
-                    const form = document.getElementById('tripForm');
-                    const selectedTripId = e.target.value;
-                    const selectedTrip = favorites.find(t => t.id === selectedTripId);
-
-                    if (e.target.checked && selectedTrip) {
-                        form.querySelector('#tripDestination').value = selectedTrip.destination || '';
-                        form.querySelector('#tripMiles').value = selectedTrip.miles || '';
-                        form.querySelector('#tripNotes').value = selectedTrip.notes || '';
-                        form.querySelector('#tripDateTime').value = new Date().toISOString().slice(0, 16);
-                        form.querySelector('#tripGasPrice').value = '';
-                    } else {
-                         // Uncheck all other favorites if a new one is checked
-                        if (e.target.checked) {
-                            favoritesList.querySelectorAll('input[name="favoriteTripSelection"]').forEach(cb => {
-                                if (cb !== e.target) cb.checked = false;
-                            });
-                        }
-                    }
-                }
-            });
-        }
-
+        // ---------- UI Render Functions ----------
         function renderTripUserCheckboxes() {
             const usersContainer = document.getElementById('tripUsersContainer');
             if (!usersContainer) return;
@@ -414,19 +488,6 @@
                 label.appendChild(input);
                 label.appendChild(span);
                 usersContainer.appendChild(label);
-
-                // New Feature: Show/Hide Favorites based on user selection
-                input.addEventListener('change', (e) => {
-                    const checkedUsers = Array.from(usersContainer.querySelectorAll('input[name="tripUser"]:checked'));
-                    const favoritesContainer = document.getElementById('favoritesContainer');
-                    if (checkedUsers.length === 1) {
-                        renderFavoritesMenu(checkedUsers[0].value);
-                    } else {
-                        favoritesContainer.style.display = 'none';
-                        const favoritesList = document.getElementById('favoritesList');
-                        if (favoritesList) favoritesList.innerHTML = '';
-                    }
-                });
             });
         }
 
@@ -437,7 +498,6 @@
             const usersWithUnpaid = users.filter(user => trips.some(trip => trip.users.includes(user.id) && !trip.paid));
             if (usersWithUnpaid.length === 0) {
                 usersContainer.innerHTML = '<p class="no-users-message">No users with unpaid trips.</p>';
-                document.getElementById('payNowBtn').style.display = 'none';
                 return;
             }
             usersWithUnpaid.forEach(user => {
@@ -456,107 +516,6 @@
             });
         }
 
-        // This function now handles both the display and the calculations
-        function renderPayTripsAndTotals(selectedUserIds) {
-            const container = document.getElementById('unpaidTripsContainer');
-            const payNowBtn = document.getElementById('payNowBtn');
-            const totalsContainer = document.getElementById('payTotalsContainer');
-            const gasPrice = parseFloat(prompt("Enter the average gas price per gallon for these trips:"));
-            const avgMpg = parseFloat(prompt("Enter the average miles per gallon (MPG) for these trips:"));
-
-            if (selectedUserIds.length === 0) {
-                container.innerHTML = '<p class="text-gray-500">Select a user to view unpaid trips.</p>';
-                payNowBtn.style.display = 'none';
-                totalsContainer.classList.add('hidden');
-                return;
-            }
-
-            const unpaidTrips = trips.filter(trip => selectedUserIds.some(id => trip.users.includes(id)) && !trip.paid);
-            if (unpaidTrips.length === 0) {
-                container.innerHTML = '<p class="text-gray-500">No unpaid trips for these users.</p>';
-                payNowBtn.style.display = 'none';
-                totalsContainer.classList.add('hidden');
-                return;
-            }
-
-            // Calculations
-            const totalMiles = unpaidTrips.reduce((sum, trip) => sum + (trip.miles || 0), 0);
-            const estimatedTotalCost = unpaidTrips.reduce((sum, trip) => {
-                const tripGasPrice = trip.gasPrice || gasPrice;
-                return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
-            }, 0);
-
-            // Render trips list with checkboxes
-            container.innerHTML = unpaidTrips.map(trip => {
-                const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
-                const tripCost = ((trip.miles || 0) / (trip.gasPrice || gasPrice) * avgMpg);
-                return `
-                    <li class="flex justify-between items-start">
-                        <input type="checkbox" name="payTrip" value="${trip.id}" class="form-checkbox text-green-600 rounded mr-2" data-cost="${tripCost}">
-                        <div>
-                            <p class="font-bold">${escapeHtml(trip.destination || 'No destination')}</p>
-                            <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
-                            <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
-                            <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp.toDate().toLocaleString())}</p>
-                            <p class="text-sm text-gray-500">Cost: $${tripCost.toFixed(2)}</p>
-                        </div>
-                    </li>
-                `;
-            }).join('');
-
-            payNowBtn.style.display = 'block';
-            totalsContainer.classList.remove('hidden');
-
-            // Add event listeners for new checkboxes and update totals
-            const tripCheckboxes = container.querySelectorAll('input[name="payTrip"]');
-            let selectedCost = 0;
-            let selectedMiles = 0;
-            let selectedCount = 0;
-
-            tripCheckboxes.forEach(cb => {
-                cb.addEventListener('change', () => {
-                    selectedCost = Array.from(container.querySelectorAll('input[name="payTrip"]:checked')).reduce((sum, cb) => sum + parseFloat(cb.dataset.cost), 0);
-                    selectedMiles = Array.from(container.querySelectorAll('input[name="payTrip"]:checked')).reduce((sum, cb) => {
-                        const tripId = cb.value;
-                        const trip = unpaidTrips.find(t => t.id === tripId);
-                        return sum + (trip.miles || 0);
-                    }, 0);
-                    selectedCount = container.querySelectorAll('input[name="payTrip"]:checked').length;
-
-                    document.getElementById('totalSelectedTrips').textContent = selectedCount;
-                    document.getElementById('totalPayMiles').textContent = selectedMiles.toFixed(2);
-                    document.getElementById('totalPayCost').textContent = `$${selectedCost.toFixed(2)}`;
-                });
-            });
-
-            // "Pay Now" button functionality
-            payNowBtn.onclick = async () => {
-                const selectedTripIds = Array.from(container.querySelectorAll('input[name="payTrip"]:checked')).map(cb => cb.value);
-                if (selectedTripIds.length === 0) {
-                    showModal('Please select at least one trip to pay.');
-                    return;
-                }
-
-                // Mark trips as paid
-                const updates = selectedTripIds.map(id => updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, id), {
-                    paid: true,
-                    paidTimestamp: serverTimestamp()
-                }));
-
-                try {
-                    await Promise.all(updates);
-                    showModal('Selected trips marked as paid!');
-                    // Generate PDF with payment details
-                    const paidTrips = unpaidTrips.filter(t => selectedTripIds.includes(t.id));
-                    generateTripReportPdf(paidTrips, selectedUserIds, gasPrice, avgMpg, true);
-                } catch (error) {
-                    console.error("Error paying trips:", error);
-                    showModal(`Failed to mark trips as paid: ${error.message}`, false);
-                }
-            };
-        }
-
-        // New feature: Paid and Unpaid toggles
         function renderSearchUserCheckboxes() {
             const usersContainer = document.getElementById('searchUsersContainer');
             if (!usersContainer) return;
@@ -579,89 +538,34 @@
                 label.appendChild(span);
                 usersContainer.appendChild(label);
             });
-
             const selectAll = document.getElementById('selectAllSearchUsers');
             selectAll.addEventListener('change', () => {
                 document.querySelectorAll('input[name="searchUser"]').forEach(cb => cb.checked = selectAll.checked);
-                generateSearchReport();
+                updateSearchResultsOnUserChange();
             });
             document.querySelectorAll('input[name="searchUser"]').forEach(cb => {
-                cb.addEventListener('change', generateSearchReport);
+                cb.addEventListener('change', updateSearchResultsOnUserChange);
             });
-            document.getElementById('showPaid').addEventListener('change', generateSearchReport);
-            document.getElementById('showUnpaid').addEventListener('change', generateSearchReport);
-            document.getElementById('startDate').addEventListener('change', generateSearchReport);
-            document.getElementById('endDate').addEventListener('change', generateSearchReport);
         }
 
-        // Renamed and improved function to handle search and display
-        function generateSearchReport() {
-            const searchResults = document.getElementById('searchResults');
-            if (!searchResults) return;
-
-            const selectedUserIds = Array.from(document.querySelectorAll('input[name="searchUser"]:checked')).map(cb => cb.value);
+        function updateSearchResultsOnUserChange() {
+            const selectedUserCheckboxes = document.querySelectorAll('input[name="searchUser"]:checked');
+            const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
             const startDateStr = document.getElementById('startDate')?.value;
             const endDateStr = document.getElementById('endDate')?.value;
-            const showPaid = document.getElementById('showPaid')?.checked;
-            const showUnpaid = document.getElementById('showUnpaid')?.checked;
 
             let filteredTrips = trips.filter(trip => {
-                // Filter by users
-                if (selectedUserIds.length > 0 && !selectedUserIds.some(id => trip.users.includes(id))) {
-                    return false;
-                }
-                // Filter by date range
+                if (selectedUserIds.length > 0 && !selectedUserIds.some(id => trip.users.includes(id))) return false;
                 if (startDateStr && endDateStr) {
                     const start = new Date(startDateStr + 'T00:00:00');
                     const end = new Date(endDateStr + 'T23:59:59.999');
-                    const tripDate = trip.timestamp.toDate();
-                    if (!(tripDate >= start && tripDate <= end)) {
-                        return false;
-                    }
+                    const tripDate = new Date(trip.timestamp);
+                    return tripDate >= start && tripDate <= end;
                 }
-                // Filter by paid status
-                if (!showPaid && trip.paid) return false;
-                if (!showUnpaid && !trip.paid) return false;
-                return true;
+                return true; // If no dates, show all for selected users
             });
 
-            let reportHtml = `<h3 class="text-xl font-bold mt-4">Search Results</h3>`;
-            if (filteredTrips.length === 0) {
-                reportHtml += `<p>No trips found for the selected criteria.</p>`;
-            } else {
-                reportHtml += `<ul class="item-list">`;
-                filteredTrips.forEach(trip => {
-                    const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
-                    const sharedNote = trip.users.length > 1 ? `(Shared)` : '';
-                    const paidInfo = trip.paid ? `Paid on: ${trip.paidTimestamp.toDate().toLocaleString()}` : '';
-                    const gasPriceUsed = trip.gasPrice ? `$${trip.gasPrice.toFixed(2)}` : 'N/A';
-
-                    reportHtml += `
-                        <li class="flex justify-between items-start">
-                            <div>
-                                <p class="font-bold">${escapeHtml(trip.destination || 'No destination')} ${sharedNote}</p>
-                                <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
-                                <p class="text-sm text-gray-500">Gas Price: ${gasPriceUsed}</p>
-                                <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
-                                <p class="text-sm text-gray-500">Notes: ${escapeHtml(trip.notes || 'N/A')}</p>
-                                <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp.toDate().toLocaleString())}</p>
-                                <p class="text-sm text-gray-500">Status: ${trip.paid ? 'Paid' : 'Unpaid'}</p>
-                                ${trip.paid ? `<p class="text-sm text-gray-500">${paidInfo}</p>` : ''}
-                            </div>
-                        </li>
-                    `;
-                });
-                reportHtml += `</ul>`;
-                reportHtml += `<button id="searchPdfBtn" class="pdf-btn mt-4">Create PDF</button>`;
-            }
-
-            searchResults.innerHTML = reportHtml;
-            const pdfBtn = document.getElementById('searchPdfBtn');
-            if (pdfBtn) {
-                pdfBtn.addEventListener('click', () => {
-                    generateTripReportPdf(filteredTrips, users.map(u => u.id), 0, 1, false);
-                });
-            }
+            generateSearchReport(filteredTrips);
         }
 
         function displayUsers() {
@@ -688,6 +592,7 @@
         function displayTrips() {
             const tripsListElement = document.getElementById('tripsList');
             if (!tripsListElement) return;
+            // Only show unpaid trips
             const unpaidTrips = trips.filter(trip => !trip.paid);
             tripsListElement.innerHTML = '';
 
@@ -696,8 +601,9 @@
                     const u = users.find(x => x.id === userId);
                     return u ? u.name : 'Unknown User';
                 }).join(', ') : 'N/A';
-                const dateStr = trip.timestamp ? trip.timestamp.toDate().toLocaleString() : 'Unknown';
-                const sharedNote = trip.users.length > 1 ? `(Shared)` : '';
+                const dateStr = trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown';
+                const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
+
                 const li = document.createElement('li');
                 li.className = 'flex justify-between items-start';
                 const left = document.createElement('div');
@@ -725,27 +631,6 @@
                     showModal(`Are you sure you want to delete the trip to "${trip.destination}"?`, true, () => deleteTrip(trip.id));
                 });
                 buttons.appendChild(deleteBtn);
-
-                // Add favorite button
-                const favoriteBtn = document.createElement('button');
-                favoriteBtn.className = 'favorite-btn';
-                favoriteBtn.textContent = '⭐';
-                favoriteBtn.addEventListener('click', async () => {
-                    const favoriteUser = trip.users[0]; // For simplicity, only favorite for the first user
-                    if (favoriteUser) {
-                        const newFavorites = trip.favoriteUsers || [];
-                        const userIndex = newFavorites.indexOf(favoriteUser);
-                        if (userIndex > -1) {
-                            newFavorites.splice(userIndex, 1);
-                        } else {
-                            newFavorites.push(favoriteUser);
-                        }
-                        await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, trip.id), { favoriteUsers: newFavorites });
-                        showModal(`Trip favorite status updated.`);
-                    }
-                });
-                buttons.appendChild(favoriteBtn);
-
                 li.appendChild(left);
                 li.appendChild(buttons);
                 tripsListElement.appendChild(li);
@@ -756,67 +641,39 @@
         }
 
         function openEditTripForm(trip) {
-            // Corrected to create elements safely instead of using innerHTML
-            const formContainer = document.createElement('div');
-            formContainer.className = 'bg-white p-4 rounded-lg shadow-lg';
-
-            const title = document.createElement('h3');
-            title.className = 'text-xl font-bold mb-4';
-            title.textContent = `Edit Trip to ${trip.destination}`;
-
-            const form = document.createElement('form');
-            form.id = 'editTripForm';
-            form.className = 'space-y-4';
-
-            // User checkboxes
-            const usersGroup = document.createElement('div');
-            usersGroup.className = 'input-group';
-            usersGroup.innerHTML = '<label>Responsible Users</label><div id="editTripUsersContainer" class="flex flex-wrap gap-2"></div>';
-            form.appendChild(usersGroup);
-
-            // Destination
-            const destGroup = document.createElement('div');
-            destGroup.className = 'input-group';
-            destGroup.innerHTML = `<label for="editTripDestination">Destination</label><input type="text" id="editTripDestination" value="${escapeHtml(trip.destination)}" required>`;
-            form.appendChild(destGroup);
-
-            // Miles
-            const milesGroup = document.createElement('div');
-            milesGroup.className = 'input-group';
-            milesGroup.innerHTML = `<label for="editTripMiles">Miles Driven</label><input type="number" id="editTripMiles" value="${trip.miles}" required>`;
-            form.appendChild(milesGroup);
-
-            // Gas Price
-            const gasPriceGroup = document.createElement('div');
-            gasPriceGroup.className = 'input-group';
-            gasPriceGroup.innerHTML = `<label for="editTripGasPrice">Gas Price Per Gallon ($) (Optional)</label><input type="number" step="0.01" id="editTripGasPrice" value="${trip.gasPrice || ''}">`;
-            form.appendChild(gasPriceGroup);
-
-            // Date and Time
-            const dateGroup = document.createElement('div');
-            dateGroup.className = 'input-group';
-            const tripDate = trip.timestamp ? trip.timestamp.toDate() : new Date();
-            const dateValue = tripDate.toISOString().slice(0, 16);
-            dateGroup.innerHTML = `<label for="editTripDateTime">Date and Time</label><input type="datetime-local" id="editTripDateTime" value="${dateValue}" required>`;
-            form.appendChild(dateGroup);
-
-            // Notes
-            const notesGroup = document.createElement('div');
-            notesGroup.className = 'input-group';
-            notesGroup.innerHTML = `<label for="editTripNotes">Notes</label><textarea id="editTripNotes" rows="3">${escapeHtml(trip.notes || '')}</textarea>`;
-            form.appendChild(notesGroup);
-
-            // Save button
-            const saveBtn = document.createElement('button');
-            saveBtn.type = 'submit';
-            saveBtn.className = 'w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors';
-            saveBtn.textContent = 'Save Changes';
-            form.appendChild(saveBtn);
-
-            formContainer.appendChild(title);
-            formContainer.appendChild(form);
-            showModal(formContainer.outerHTML, false);
-
+            const formHtml = `
+                <div class="bg-white p-4 rounded-lg shadow-lg">
+                    <h3 class="text-xl font-bold mb-4">Edit Trip to ${escapeHtml(trip.destination)}</h3>
+                    <form id="editTripForm" class="space-y-4">
+                        <div class="input-group">
+                            <label>Responsible Users</label>
+                            <div id="editTripUsersContainer" class="flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="input-group">
+                            <label for="editTripDestination">Destination</label>
+                            <input type="text" id="editTripDestination" value="${escapeHtml(trip.destination)}" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editTripMiles">Miles Driven</label>
+                            <input type="number" id="editTripMiles" value="${trip.miles}" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editTripGasPrice">Gas Price Per Gallon ($) (Optional)</label>
+                            <input type="number" step="0.01" id="editTripGasPrice" value="${trip.gasPrice || ''}">
+                        </div>
+                        <div class="input-group">
+                            <label for="editTripDateTime">Date and Time</label>
+                            <input type="datetime-local" id="editTripDateTime" value="${trip.timestamp ? new Date(trip.timestamp).toISOString().slice(0, 16) : ''}" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editTripNotes">Notes</label>
+                            <textarea id="editTripNotes" rows="3">${escapeHtml(trip.notes || '')}</textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors">Save Changes</button>
+                    </form>
+                </div>
+            `;
+            showModal(formHtml, false);
             const editUsersContainer = document.getElementById('editTripUsersContainer');
             users.forEach(user => {
                 const label = document.createElement('label');
@@ -833,12 +690,17 @@
                 label.appendChild(span);
                 editUsersContainer.appendChild(label);
             });
-
             document.getElementById('editTripForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const destination = document.getElementById('editTripDestination').value.trim();
                 const miles = parseFloat(document.getElementById('editTripMiles').value);
                 const gasPrice = parseFloat(document.getElementById('editTripGasPrice').value) || null;
+                const timestampStr = document.getElementById('editTripDateTime').value;
+                if (!timestampStr) {
+                    showModal('Please select a date and time.');
+                    return;
+                }
+                const timestamp = new Date(timestampStr).toISOString();
                 const notes = document.getElementById('editTripNotes').value.trim();
                 const selectedUserIds = Array.from(document.querySelectorAll('input[name="editTripUser"]:checked')).map(cb => cb.value);
 
@@ -851,81 +713,97 @@
                     destination,
                     miles,
                     gasPrice,
+                    timestamp,
                     notes,
-                    users: selectedUserIds
+                    users: selectedUserIds,
+                    shared: selectedUserIds.length > 1,
+                    sharedWith: selectedUserIds.length > 1 ? selectedUserIds : []
                 };
                 await updateTrip(trip.id, updatedData);
-                hideModal();
             });
         }
 
-        // Refactored PDF generation to be more reusable and correct
+        function generateReport(selectedUserIds, gasPrice, avgMpg) {
+            const reportContainer = document.getElementById('reportContainer');
+            if (!reportContainer) return;
+
+            const unpaidTrips = trips.filter(trip => selectedUserIds.some(id => trip.users.includes(id)) && !trip.paid);
+            const totalMiles = unpaidTrips.reduce((sum, trip) => sum + (trip.miles || 0), 0);
+            const totalGallons = totalMiles / avgMpg;
+            const estimatedTotalCost = unpaidTrips.reduce((sum, trip) => {
+                const tripGasPrice = trip.gasPrice || gasPrice;
+                return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
+            }, 0);
+
+            let reportHtml = `
+                <div class="report-summary">
+                    <h3 class="text-green-800">Trip Report</h3>
+                    <p><strong>Total Miles Driven:</strong> ${totalMiles.toFixed(2)} miles</p>
+                    <p><strong>Estimated Gallons Used:</strong> ${totalGallons.toFixed(2)} gallons</p>
+                    <p><strong>Estimated Total Fuel Cost:</strong> $${estimatedTotalCost.toFixed(2)}</p>
+                </div>
+            `;
+
+            const userCosts = users.reduce((acc, user) => {
+                if (selectedUserIds.includes(user.id)) {
+                    acc[user.id] = { name: user.name, miles: 0, cost: 0 };
+                }
+                return acc;
+            }, {});
+
+            unpaidTrips.forEach(trip => {
+                if (!trip.users || trip.users.length === 0) return;
+                const milesPerUser = (trip.miles || 0) / trip.users.length;
+                const tripGasPrice = trip.gasPrice || gasPrice;
+                trip.users.forEach(userId => {
+                    if (userCosts[userId]) {
+                        userCosts[userId].miles += milesPerUser;
+                        userCosts[userId].cost += (milesPerUser / avgMpg * tripGasPrice);
+                    }
+                });
+            });
+
+            reportHtml += `<h3 class="mt-8 text-green-800 font-bold text-xl">Individual Cost Breakdown</h3>`;
+            reportHtml += `<ul class="list-disc ml-6 mt-4 space-y-2">`;
+            for (const userId in userCosts) {
+                const user = userCosts[userId];
+                reportHtml += `<li><strong>${escapeHtml(user.name)}:</strong> ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})</li>`;
+            }
+            reportHtml += `</ul>`;
+            reportHtml += `<button id="createPdfBtn" class="pdf-btn mt-4">Create PDF</button>`;
+
+            reportContainer.innerHTML = reportHtml;
+            reportContainer.classList.remove('hidden');
+
+            document.getElementById('createPdfBtn').addEventListener('click', () => {
+                generateTripReportPdf(unpaidTrips, selectedUserIds, gasPrice, avgMpg, false);
+            });
+        }
+
         function generateTripReportPdf(tripsToInclude, selectedUserIds, gasPrice, avgMpg, isPayment = false) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-            let y = 10;
-            const lineHeight = 7;
-            const pageHeight = doc.internal.pageSize.height;
+            doc.setFontSize(16);
+            doc.text(isPayment ? 'Trip Payment Report' : 'Trip Report', 10, 10);
 
-            const addPageHeader = (title) => {
-                doc.setFontSize(16);
-                doc.text(title, 10, y);
-                y += lineHeight * 2;
-            };
-
-            const addSummary = (totalMiles, totalCost) => {
-                doc.setFontSize(12);
-                doc.text(`Total Miles: ${totalMiles.toFixed(2)} miles`, 10, y);
-                y += lineHeight;
-                doc.text(`Estimated Total Cost: $${totalCost.toFixed(2)}`, 10, y);
-                y += lineHeight * 2;
-            };
-
-            const addBreakdown = (userCosts) => {
-                doc.text('Individual Cost Breakdown:', 10, y);
-                y += lineHeight;
-                for (const userId in userCosts) {
-                    const user = userCosts[userId];
-                    doc.text(`${user.name}: ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})`, 10, y);
-                    y += lineHeight;
-                }
-                y += lineHeight;
-            };
-
-            const addTripDetails = (tripsList) => {
-                doc.text('Trip Details:', 10, y);
-                y += lineHeight;
-                tripsList.forEach((trip) => {
-                    const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
-                    const paidStatus = trip.paid ? `Status: Paid on ${trip.paidTimestamp.toDate().toLocaleDateString()}` : `Status: Unpaid`;
-                    const tripDetails = [
-                        `Destination: ${trip.destination}`,
-                        `Miles: ${trip.miles}`,
-                        `Gas Price: $${trip.gasPrice || gasPrice}`,
-                        `Users: ${userNames}`,
-                        `Date: ${trip.timestamp.toDate().toLocaleString()}`,
-                        paidStatus
-                    ];
-
-                    tripDetails.forEach(detail => {
-                        if (y > pageHeight - 20) {
-                            doc.addPage();
-                            y = 10;
-                            addPageHeader(isPayment ? 'Trip Payment Report (Cont.)' : 'Trip Report (Cont.)');
-                        }
-                        doc.text(detail, 15, y);
-                        y += lineHeight;
-                    });
-                    y += lineHeight;
-                });
-            };
-
-            // Main logic
             const totalMiles = tripsToInclude.reduce((sum, trip) => sum + (trip.miles || 0), 0);
+            const totalGallons = totalMiles / avgMpg;
             const estimatedTotalCost = tripsToInclude.reduce((sum, trip) => {
                 const tripGasPrice = trip.gasPrice || gasPrice;
                 return sum + ((trip.miles || 0) / avgMpg * tripGasPrice);
             }, 0);
+
+            doc.setFontSize(12);
+            doc.text(`Total Miles Driven: ${totalMiles.toFixed(2)} miles`, 10, 20);
+            doc.text(`Estimated Gallons Used: ${totalGallons.toFixed(2)} gallons`, 10, 30);
+            doc.text(`Estimated Total Fuel Cost: $${estimatedTotalCost.toFixed(2)}`, 10, 40);
+
+            if (isPayment) {
+                doc.text(`Paid On: ${new Date().toLocaleString()}`, 10, 50);
+                y = 60;
+            } else {
+                y = 50;
+            }
 
             const userCosts = users.reduce((acc, user) => {
                 if (selectedUserIds.includes(user.id)) {
@@ -946,21 +824,76 @@
                 });
             });
 
-            addPageHeader(isPayment ? 'Trip Payment Report' : 'Trip Report');
-            addSummary(totalMiles, estimatedTotalCost);
-            addBreakdown(userCosts);
-            addTripDetails(tripsToInclude);
+            doc.text('Individual Cost Breakdown', 10, y);
+            y += 10;
+            for (const userId in userCosts) {
+                const user = userCosts[userId];
+                doc.text(`${user.name}: ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})`, 10, y);
+                y += 10;
+            }
+
+            if (tripsToInclude.length > 0) {
+                doc.text('Trip Details', 10, y);
+                y += 10;
+                tripsToInclude.forEach((trip, index) => {
+                    const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
+                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
+                    doc.text(`${index + 1}. ${trip.destination || 'No destination'} ${sharedNote}`, 10, y);
+                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown'}`, 10, y + 5);
+                    y += 15;
+                });
+            }
 
             const filename = isPayment ? `trip-payment-${new Date().toISOString().split('T')[0]}.pdf` : `trip-report-${new Date().toISOString().split('T')[0]}.pdf`;
             doc.save(filename);
         }
 
-        // --- Event Listeners ---
+        function generateSearchReport(filteredTrips) {
+            const searchResults = document.getElementById('searchResults');
+            if (!searchResults) return;
+
+            let reportHtml = `<h3 class="text-xl font-bold mt-4">Search Results</h3>`;
+            if (filteredTrips.length === 0) {
+                reportHtml += `<p>No trips found for the selected criteria.</p>`;
+            } else {
+                reportHtml += `<ul class="item-list">`;
+                filteredTrips.forEach(trip => {
+                    const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
+                    const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
+                    reportHtml += `
+                        <li class="flex justify-between items-start">
+                            <div>
+                                <p class="font-bold">${escapeHtml(trip.destination || 'No destination')} ${sharedNote}</p>
+                                <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
+                                <p class="text-sm text-gray-500">Gas Price: $${escapeHtml(String(trip.gasPrice ?? 'N/A'))}</p>
+                                <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
+                                <p class="text-sm text-gray-500">Notes: ${escapeHtml(trip.notes || 'N/A')}</p>
+                                <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown')}</p>
+                                <p class="text-sm text-gray-500">Status: ${trip.paid ? 'Paid' : 'Unpaid'}</p>
+                            </div>
+                        </li>
+                    `;
+                });
+                reportHtml += `</ul>`;
+                reportHtml += `<button id="searchPdfBtn" class="pdf-btn mt-4">Create PDF</button>`;
+            }
+
+            searchResults.innerHTML = reportHtml;
+            const pdfBtn = document.getElementById('searchPdfBtn');
+            if (pdfBtn) {
+                pdfBtn.addEventListener('click', () => {
+                    generateTripReportPdf(filteredTrips, users.map(u => u.id), 0, 1, false);
+                });
+            }
+        }
+
+        // ---------- Event Listeners ----------
         function setupEventListeners() {
             document.getElementById('tripsTab').addEventListener('click', () => switchTab('trips'));
             document.getElementById('usersTab').addEventListener('click', () => switchTab('users'));
             document.getElementById('payTab').addEventListener('click', () => switchTab('pay'));
             document.getElementById('advancedTab').addEventListener('click', () => switchTab('advanced'));
+
             document.getElementById('modalClose').addEventListener('click', hideModal);
 
             const userForm = document.getElementById('userForm');
@@ -995,11 +928,18 @@
                 tripForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const destination = document.getElementById('tripDestination')?.value?.trim() || '';
-                    const miles = parseFloat(document.getElementById('tripMiles')?.value) || 0;
+                    const milesRaw = document.getElementById('tripMiles')?.value;
+                    const miles = milesRaw ? parseFloat(milesRaw) : 0;
                     const gasPrice = parseFloat(document.getElementById('tripGasPrice')?.value) || null;
+                    const timestampStr = document.getElementById('tripDateTime')?.value;
+                    if (!timestampStr) {
+                        showModal('Please select a date and time.');
+                        return;
+                    }
+                    const timestamp = new Date(timestampStr).toISOString();
                     const notes = document.getElementById('tripNotes')?.value?.trim() || '';
-                    const isFavorite = document.getElementById('favoriteTrip')?.checked || false;
-                    const selectedUserIds = Array.from(document.querySelectorAll('input[name="tripUser"]:checked')).map(cb => cb.value);
+                    const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
+                    const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
 
                     if (selectedUserIds.length === 0) {
                         showModal("Please select at least one responsible user.");
@@ -1011,26 +951,41 @@
                     }
 
                     try {
-                        const newTrip = {
-                            destination,
-                            miles,
-                            gasPrice,
-                            notes,
-                            users: selectedUserIds,
-                            paid: false,
-                            timestamp: serverTimestamp(),
-                            favoriteUsers: isFavorite ? selectedUserIds : []
-                        };
-
-                        // New, corrected logic: Save a single document for all users
-                        await addDoc(collection(db, `artifacts/${appId}/public/data/trips`), newTrip);
-
+                        if (selectedUserIds.length === 1) {
+                            // Single user trip
+                            await addDoc(collection(db, `artifacts/${appId}/public/data/trips`), {
+                                destination,
+                                miles,
+                                gasPrice,
+                                timestamp,
+                                notes,
+                                users: selectedUserIds,
+                                paid: false,
+                                shared: false,
+                                sharedWith: [],
+                                created: serverTimestamp()
+                            });
+                        } else {
+                            // Shared trip: Create a record for each user
+                            const milesPerUser = miles / selectedUserIds.length;
+                            for (const userId of selectedUserIds) {
+                                await addDoc(collection(db, `artifacts/${appId}/public/data/trips`), {
+                                    destination,
+                                    miles: milesPerUser,
+                                    gasPrice,
+                                    timestamp,
+                                    notes,
+                                    users: [userId],
+                                    paid: false,
+                                    shared: true,
+                                    sharedWith: selectedUserIds.filter(id => id !== userId),
+                                    created: serverTimestamp()
+                                });
+                            }
+                        }
                         tripForm.reset();
-                        document.querySelectorAll('input[name="tripUser"]').forEach(cb => cb.checked = false);
-                        document.getElementById('favoritesContainer').style.display = 'none';
-                        document.getElementById('favoritesList').innerHTML = '';
+                        selectedUserCheckboxes.forEach(cb => cb.checked = false);
                         showModal('Trip added successfully!');
-
                     } catch (error) {
                         console.error("Error adding trip:", error);
                         showModal(`Failed to add trip: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
@@ -1053,7 +1008,23 @@
             if (searchForm) {
                 searchForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    generateSearchReport();
+                    const selectedUserCheckboxes = document.querySelectorAll('input[name="searchUser"]:checked');
+                    const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
+                    const startDateStr = document.getElementById('startDate')?.value;
+                    const endDateStr = document.getElementById('endDate')?.value;
+
+                    let filteredTrips = trips.filter(trip => {
+                        if (selectedUserIds.length > 0 && !selectedUserIds.some(id => trip.users.includes(id))) return false;
+                        if (startDateStr && endDateStr) {
+                            const start = new Date(startDateStr + 'T00:00:00');
+                            const end = new Date(endDateStr + 'T23:59:59.999');
+                            const tripDate = new Date(trip.timestamp);
+                            return tripDate >= start && tripDate <= end;
+                        }
+                        return true; // If no dates, show all for selected users
+                    });
+
+                    generateSearchReport(filteredTrips);
                 });
             }
 
@@ -1062,71 +1033,12 @@
                 resetDatesBtn.addEventListener('click', () => {
                     document.getElementById('startDate').value = '';
                     document.getElementById('endDate').value = '';
-                    generateSearchReport(); // Refresh search after clearing dates
+                    showModal('Dates reset.');
                 });
             }
         }
 
-        // --- Utility Functions ---
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
-            document.getElementById(tabId + 'Content').classList.remove('hidden');
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active-tab'));
-            document.getElementById(tabId + 'Tab').classList.add('active-tab');
-
-            // Logic to handle tab-specific rendering
-            if (tabId === 'trips') {
-                updateUIForTrips();
-                updateUIForUsers();
-            } else if (tabId === 'users') {
-                updateUIForUsers();
-            } else if (tabId === 'pay') {
-                updateUIForTrips();
-                updateUIForUsers();
-            } else if (tabId === 'advanced') {
-                updateUIForTrips();
-                updateUIForUsers();
-                generateSearchReport();
-            }
-        }
-
-        function showModal(content, isConfirm = false, onConfirm) {
-            const modal = document.getElementById('modal');
-            const modalBody = document.getElementById('modalBody');
-            const modalActions = document.getElementById('modalActions');
-            const modalConfirm = document.getElementById('modalConfirm');
-            const modalCancel = document.getElementById('modalCancel');
-
-            modalBody.innerHTML = '';
-            if (typeof content === 'string') {
-                modalBody.innerHTML = content;
-            } else {
-                modalBody.appendChild(content);
-            }
-
-            if (isConfirm) {
-                modalConfirm.classList.remove('hidden');
-                modalCancel.classList.remove('hidden');
-                modalConfirm.onclick = () => {
-                    if (onConfirm) onConfirm();
-                    hideModal();
-                };
-                modalCancel.onclick = hideModal;
-            } else {
-                modalConfirm.classList.add('hidden');
-                modalCancel.classList.add('hidden');
-            }
-            modal.classList.remove('hidden');
-        }
-
-        function hideModal() {
-            document.getElementById('modal').classList.add('hidden');
-        }
-
-        // Corrected and defined escapeHtml function
         function escapeHtml(unsafe) {
-            if (unsafe === null || typeof unsafe === 'undefined') return '';
             return String(unsafe)
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
@@ -1135,7 +1047,7 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // --- Initialize App ---
+        // ---------- Initialize App ----------
         window.addEventListener('load', () => {
             initializeFirebase();
             setupEventListeners();
@@ -1144,3 +1056,4 @@
     </script>
 </body>
 </html>
+```
