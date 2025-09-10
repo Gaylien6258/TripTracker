@@ -220,7 +220,7 @@
                     <textarea id="tripNotes" placeholder="e.g., Drove to the conference" rows="3"></textarea>
                 </div>
                 <div class="input-group">
-                    <label class="flex items-center space-x-2">
+                    <label class="flex items-center space-x-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-300">
                         <input type="checkbox" id="tripFavorite" class="form-checkbox text-blue-600 rounded">
                         <span>Mark as Favorite</span>
                     </label>
@@ -314,11 +314,11 @@
 
         <!-- Custom Modal -->
         <div id="modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden modal-flex p-4">
-            <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-lg text-center">
+            <div class="bg-white rounded-lg p-6 max-w-lg w-full shadow-lg text-center">
                 <p id="modalMessage" class="mb-4 text-lg"></p>
                 <div id="modalButtons" class="flex justify-center gap-4">
-                    <button id="modalConfirm" class="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors hidden">Yes</button>
-                    <button id="modalClose" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors">OK</button>
+                    <button id="modalConfirm" class="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:from-green-500 hover:to-blue-600 transition-colors hidden">Confirm</button>
+                    <button id="modalClose" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors">Cancel</button>
                 </div>
             </div>
         </div>
@@ -328,7 +328,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase Config (your specific Trip Tracker project)
         const appId = 'trip-tracker-de1de';
@@ -399,7 +399,7 @@
 
             if (isConfirmation) {
                 modalConfirmBtn.classList.remove('hidden');
-                modalCloseBtn.textContent = 'No';
+                modalCloseBtn.textContent = 'Cancel';
                 modalConfirmBtn.onclick = () => {
                     hideModal();
                     if (onConfirmCallback) onConfirmCallback();
@@ -523,22 +523,24 @@
         function updateFavoritesSection() {
             const checked = document.querySelectorAll('input[name="tripUser"]:checked');
             const favoritesSection = document.getElementById('favoritesSection');
+            const favoriteSelect = document.getElementById('favoriteTrip');
             if (checked.length !== 1) {
                 favoritesSection.classList.add('hidden');
+                favoriteSelect.value = '';
+                document.getElementById('tripFavorite').checked = false;
                 return;
             }
             const userId = checked[0].value;
             const user = users.find(u => u.id === userId);
             const favs = user.favorites || [];
-            const select = document.getElementById('favoriteTrip');
-            select.innerHTML = '<option value="">Select a favorite trip</option>';
+            favoriteSelect.innerHTML = '<option value="">Select a favorite trip</option>';
             favs.forEach(tripId => {
                 const trip = trips.find(t => t.id === tripId);
                 if (trip) {
                     const opt = document.createElement('option');
                     opt.value = trip.id;
                     opt.textContent = escapeHtml(trip.destination);
-                    select.appendChild(opt);
+                    favoriteSelect.appendChild(opt);
                 }
             });
             favoritesSection.classList.remove('hidden');
@@ -791,9 +793,6 @@
         }
 
         function generateReport(selectedTrips, gasPrice, avgMpg) {
-            const reportContainer = document.getElementById('reportContainer');
-            if (!reportContainer) return;
-
             const totalMiles = selectedTrips.reduce((sum, trip) => sum + (trip.miles || 0), 0);
             const totalGallons = totalMiles / avgMpg;
             const estimatedTotalCost = selectedTrips.reduce((sum, trip) => {
@@ -831,14 +830,39 @@
                 reportHtml += `<li><strong>${escapeHtml(user.name)}:</strong> ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})</li>`;
             }
             reportHtml += `</ul>`;
-            reportHtml += `<button id="createPdfBtn" class="pdf-btn mt-4">Create PDF</button>`;
+            return reportHtml;
+        }
 
-            reportContainer.innerHTML = reportHtml;
-            reportContainer.classList.remove('hidden');
-
-            document.getElementById('createPdfBtn').addEventListener('click', () => {
-                generateTripReportPdf(selectedTrips, Object.keys(userCosts), gasPrice, avgMpg, false);
-            });
+        function showPaymentConfirmation(tripsToPay, gasPrice, avgMpg) {
+            const reportHtml = generateReport(tripsToPay, gasPrice, avgMpg);
+            showModal(
+                reportHtml,
+                true,
+                async () => {
+                    const paidUserIds = [...new Set(tripsToPay.flatMap(t => t.users))];
+                    try {
+                        for (const trip of tripsToPay) {
+                            const usedGasPrice = trip.gasPrice || gasPrice;
+                            const gallons = trip.miles / avgMpg;
+                            const amount = gallons * usedGasPrice;
+                            await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, trip.id), {
+                                paid: true,
+                                paidAmount: amount,
+                                paidGasPrice: usedGasPrice,
+                                paidDate: new Date().toISOString()
+                            });
+                        }
+                        generateTripReportPdf(tripsToPay, paidUserIds, gasPrice, avgMpg, true);
+                        showModal('Trips paid successfully!');
+                        const selectedUserCheckboxes = document.querySelectorAll('input[name="payUser"]:checked');
+                        const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
+                        renderPayTripsAndTotals(selectedUserIds);
+                    } catch (error) {
+                        console.error("Error paying trips:", error);
+                        showModal(`Failed to pay trips: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
+                    }
+                }
+            );
         }
 
         function generateTripReportPdf(tripsToInclude, selectedUserIds, gasPrice, avgMpg, isPayment = false) {
@@ -861,7 +885,7 @@
 
             let y = 50;
             if (isPayment) {
-                doc.text(`Paid On: ${new Date().toLocaleString()}`, 10, 50);
+                doc.text(`Paid On: ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}`, 10, 50);
                 y = 60;
             }
 
@@ -899,7 +923,7 @@
                     const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
                     const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
                     doc.text(`${index + 1}. ${trip.destination || 'No destination'} ${sharedNote}`, 10, y);
-                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown'}`, 10, y + 5);
+                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown'}`, 10, y + 5);
                     y += 15;
                 });
             }
@@ -931,8 +955,11 @@
                                 ${paidAmountHtml}
                                 <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
                                 <p class="text-sm text-gray-500">Notes: ${escapeHtml(trip.notes || 'N/A')}</p>
-                                <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleString() : 'Unknown')}</p>
+                                <p class="text-sm text-gray-500">Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown')}</p>
                                 <p class="text-sm text-gray-500">Status: ${trip.paid ? 'Paid' : 'Unpaid'}</p>
+                            </div>
+                            <div>
+                                <button class="delete-btn" data-trip-id="${trip.id}">Delete</button>
                             </div>
                         </li>
                     `;
@@ -948,6 +975,20 @@
                     generateTripReportPdf(filteredTrips, users.map(u => u.id), 0, 1, false);
                 });
             }
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tripId = btn.getAttribute('data-trip-id');
+                    const trip = trips.find(t => t.id === tripId);
+                    showModal(
+                        `Deleting this record cannot be undone. Proceed anyway?`,
+                        true,
+                        () => {
+                            deleteTrip(tripId);
+                            updateSearchResults();
+                        }
+                    );
+                });
+            });
         }
 
         function renderPayTripsAndTotals(selectedUserIds) {
@@ -972,7 +1013,7 @@
                     <input type="checkbox" class="trip-checkbox form-checkbox text-blue-600 rounded" value="${trip.id}" checked>
                     <div class="trip-details">
                         <p>${escapeHtml(trip.destination || 'No destination')} - ${escapeHtml(user ? user.name : 'Unknown')}</p>
-                        <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}, Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleDateString() : 'Unknown')}</p>
+                        <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}, Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown')}</p>
                     </div>
                 `;
                 container.appendChild(item);
@@ -1005,6 +1046,18 @@
             const canPay = checkedCheckboxes.length > 0 && gasPrice > 0 && avgMpg > 0;
             payBtn.classList.toggle('disabled', !canPay);
             payBtn.disabled = !canPay;
+        }
+
+        function getPacificTime() {
+            return new Date().toLocaleString('en-US', {
+                timeZone: 'America/Los_Angeles',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).replace(/(\d+)\/(\d+)\/(\d+), (\d+):(\d+)/, '$3-$1-$2T$4:$5');
         }
 
         // ---------- Event Listeners ----------
@@ -1046,17 +1099,19 @@
 
             const tripForm = document.getElementById('tripForm');
             if (tripForm) {
-                // Set default current date/time
-                document.getElementById('tripDateTime').value = new Date().toISOString().slice(0, 16);
+                // Set default current date/time in Pacific Time
+                document.getElementById('tripDateTime').value = getPacificTime();
 
                 document.getElementById('favoriteTrip').addEventListener('change', () => {
                     const select = document.getElementById('favoriteTrip');
                     const tripId = select.value;
+                    const favoriteCheckbox = document.getElementById('tripFavorite');
                     if (!tripId) {
                         document.getElementById('tripDestination').value = '';
                         document.getElementById('tripMiles').value = '';
                         document.getElementById('tripGasPrice').value = '';
                         document.getElementById('tripNotes').value = '';
+                        favoriteCheckbox.checked = false;
                         return;
                     }
                     const trip = trips.find(t => t.id === tripId);
@@ -1065,7 +1120,8 @@
                         document.getElementById('tripMiles').value = trip.miles;
                         document.getElementById('tripGasPrice').value = '';
                         document.getElementById('tripNotes').value = trip.notes || '';
-                        document.getElementById('tripDateTime').value = new Date().toISOString().slice(0, 16);
+                        document.getElementById('tripDateTime').value = getPacificTime();
+                        favoriteCheckbox.checked = true;
                     }
                 });
 
@@ -1088,6 +1144,8 @@
                     const notes = document.getElementById('tripNotes')?.value?.trim() || '';
                     const selectedUserCheckboxes = document.querySelectorAll('input[name="tripUser"]:checked');
                     const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
+                    const isFavorite = document.getElementById('tripFavorite').checked;
+                    const selectedFavorite = document.getElementById('favoriteTrip').value;
 
                     if (selectedUserIds.length === 0) {
                         showModal("Please select at least one responsible user.");
@@ -1134,19 +1192,25 @@
                             }
                         }
 
-                        // Add to favorites if checked and single user
-                        const isFavorite = document.getElementById('tripFavorite').checked;
-                        if (isFavorite && selectedUserIds.length === 1 && newTripId) {
+                        // Handle favorites for single user
+                        if (selectedUserIds.length === 1) {
                             const userId = selectedUserIds[0];
                             const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                            await updateDoc(userRef, {
-                                favorites: arrayUnion(newTripId)
-                            });
+                            if (isFavorite && newTripId) {
+                                await updateDoc(userRef, {
+                                    favorites: arrayUnion(newTripId)
+                                });
+                            } else if (!isFavorite && selectedFavorite) {
+                                await updateDoc(userRef, {
+                                    favorites: arrayRemove(selectedFavorite)
+                                });
+                            }
                         }
 
                         tripForm.reset();
                         selectedUserCheckboxes.forEach(cb => cb.checked = false);
-                        document.getElementById('tripDateTime').value = new Date().toISOString().slice(0, 16);
+                        document.getElementById('tripDateTime').value = getPacificTime();
+                        document.getElementById('tripFavorite').checked = false;
                         showModal('Trip added successfully!');
                     } catch (error) {
                         console.error("Error adding trip:", error);
@@ -1175,7 +1239,7 @@
 
             const payNowBtn = document.getElementById('payNowBtn');
             if (payNowBtn) {
-                payNowBtn.addEventListener('click', async () => {
+                payNowBtn.addEventListener('click', () => {
                     const gasPrice = parseFloat(document.getElementById('gasPrice').value);
                     const avgMpg = parseFloat(document.getElementById('avgMpg').value);
                     if (isNaN(gasPrice) || gasPrice <= 0 || isNaN(avgMpg) || avgMpg <= 0) {
@@ -1189,32 +1253,7 @@
                         return;
                     }
                     const tripsToPay = trips.filter(t => tripIdsToPay.includes(t.id));
-
-                    try {
-                        for (const trip of tripsToPay) {
-                            const usedGasPrice = trip.gasPrice || gasPrice;
-                            const gallons = trip.miles / avgMpg;
-                            const amount = gallons * usedGasPrice;
-                            await updateDoc(doc(db, `artifacts/${appId}/public/data/trips`, trip.id), {
-                                paid: true,
-                                paidAmount: amount,
-                                paidGasPrice: usedGasPrice,
-                                paidDate: new Date().toISOString()
-                            });
-                        }
-                        // Get unique user IDs from paid trips
-                        const paidUserIds = [...new Set(tripsToPay.flatMap(t => t.users))];
-                        generateTripReportPdf(tripsToPay, paidUserIds, gasPrice, avgMpg, true);
-                        generateReport(tripsToPay, gasPrice, avgMpg);
-                        showModal('Trips paid successfully!');
-                        // Refresh pay tab
-                        const selectedUserCheckboxes = document.querySelectorAll('input[name="payUser"]:checked');
-                        const selectedUserIds = Array.from(selectedUserCheckboxes).map(cb => cb.value);
-                        renderPayTripsAndTotals(selectedUserIds);
-                    } catch (error) {
-                        console.error("Error paying trips:", error);
-                        showModal(`Failed to pay trips: ${error.message || error.code || 'Unknown error. Check console for details.'}`, false);
-                    }
+                    showPaymentConfirmation(tripsToPay, gasPrice, avgMpg);
                 });
             }
 
