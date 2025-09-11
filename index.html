@@ -205,7 +205,7 @@
                 </div>
                 <div class="input-group">
                     <label for="tripMiles">Miles Driven</label>
-                    <input type="number" min="0" id="tripMiles" placeholder="e.g., 250" required>
+                    <input type="number" min="0" step="0.1" id="tripMiles" placeholder="e.g., 6.2" required>
                 </div>
                 <div class="input-group">
                     <label for="tripGasPrice">Gas Price Per Gallon ($) (Optional)</label>
@@ -674,7 +674,7 @@
                 const left = document.createElement('div');
                 left.innerHTML = `
                     <p class="font-bold">${escapeHtml(trip.destination || 'No destination')} ${escapeHtml(sharedNote)}</p>
-                    <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
+                    <p class="text-sm text-gray-500">Miles: ${escapeHtml(trip.miles.toFixed(1))}</p>
                     <p class="text-sm text-gray-500">Gas Price: $${escapeHtml(String(gasPriceDisplay))}</p>
                     <p class="text-sm text-gray-500">Users: ${escapeHtml(responsibleUserNames)}</p>
                     <p class="text-sm text-gray-500">Notes: ${escapeHtml(trip.notes || 'N/A')}</p>
@@ -720,7 +720,7 @@
                         </div>
                         <div class="input-group">
                             <label for="editTripMiles">Miles Driven</label>
-                            <input type="number" min="0" id="editTripMiles" value="${trip.miles}" required>
+                            <input type="number" min="0" step="0.1" id="editTripMiles" value="${trip.miles}" required>
                         </div>
                         <div class="input-group">
                             <label for="editTripGasPrice">Gas Price Per Gallon ($) (Optional)</label>
@@ -803,7 +803,7 @@
             let reportHtml = `
                 <div class="report-summary">
                     <h3 class="text-green-800">Trip Report</h3>
-                    <p><strong>Total Miles Driven:</strong> ${totalMiles.toFixed(2)} miles</p>
+                    <p><strong>Total Miles Driven:</strong> ${totalMiles.toFixed(1)} miles</p>
                     <p><strong>Estimated Gallons Used:</strong> ${totalGallons.toFixed(2)} gallons</p>
                     <p><strong>Estimated Total Fuel Cost:</strong> $${estimatedTotalCost.toFixed(2)}</p>
                 </div>
@@ -827,7 +827,7 @@
             reportHtml += `<ul class="list-disc ml-6 mt-4 space-y-2">`;
             for (const userId in userCosts) {
                 const user = userCosts[userId];
-                reportHtml += `<li><strong>${escapeHtml(user.name)}:</strong> ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})</li>`;
+                reportHtml += `<li><strong>${escapeHtml(user.name)}:</strong> ${user.miles.toFixed(1)} miles ($${user.cost.toFixed(2)})</li>`;
             }
             reportHtml += `</ul>`;
             return reportHtml;
@@ -879,7 +879,7 @@
             }, 0);
 
             doc.setFontSize(12);
-            doc.text(`Total Miles Driven: ${totalMiles.toFixed(2)} miles`, 10, 20);
+            doc.text(`Total Miles Driven: ${totalMiles.toFixed(1)} miles`, 10, 20);
             doc.text(`Estimated Gallons Used: ${totalGallons.toFixed(2)} gallons`, 10, 30);
             doc.text(`Estimated Total Fuel Cost: $${estimatedTotalCost.toFixed(2)}`, 10, 40);
 
@@ -912,7 +912,7 @@
             y += 10;
             for (const userId in userCosts) {
                 const user = userCosts[userId];
-                doc.text(`${user.name}: ${user.miles.toFixed(2)} miles ($${user.cost.toFixed(2)})`, 10, y);
+                doc.text(`${user.name}: ${user.miles.toFixed(1)} miles ($${user.cost.toFixed(2)})`, 10, y);
                 y += 10;
             }
 
@@ -923,7 +923,7 @@
                     const userNames = trip.users.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ');
                     const sharedNote = trip.shared ? `(Shared with: ${trip.sharedWith ? trip.sharedWith.map(id => users.find(u => u.id === id)?.name || 'Unknown').join(', ') : ''})` : '';
                     doc.text(`${index + 1}. ${trip.destination || 'No destination'} ${sharedNote}`, 10, y);
-                    doc.text(`   Miles: ${trip.miles || 0}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown'}`, 10, y + 5);
+                    doc.text(`   Miles: ${trip.miles.toFixed(1)}, Gas Price: $${trip.gasPrice || gasPrice}, Date: ${trip.timestamp ? new Date(trip.timestamp).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown'}`, 10, y + 5);
                     y += 15;
                 });
             }
@@ -950,7 +950,7 @@
                         <li class="flex justify-between items-start">
                             <div>
                                 <p class="font-bold">${escapeHtml(trip.destination || 'No destination')} ${escapeHtml(sharedNote)}</p>
-                                <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}</p>
+                                <p class="text-sm text-gray-500">Miles: ${escapeHtml(trip.miles.toFixed(1))}</p>
                                 <p class="text-sm text-gray-500">Gas Price: $${escapeHtml(String(gasPriceDisplay))}</p>
                                 ${paidAmountHtml}
                                 <p class="text-sm text-gray-500">Users: ${escapeHtml(userNames)}</p>
@@ -1013,7 +1013,7 @@
                     <input type="checkbox" class="trip-checkbox form-checkbox text-blue-600 rounded" value="${trip.id}" checked>
                     <div class="trip-details">
                         <p>${escapeHtml(trip.destination || 'No destination')} - ${escapeHtml(user ? user.name : 'Unknown')}</p>
-                        <p class="text-sm text-gray-500">Miles: ${escapeHtml(String(trip.miles ?? '0'))}, Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown')}</p>
+                        <p class="text-sm text-gray-500">Miles: ${escapeHtml(trip.miles.toFixed(1))}, Date: ${escapeHtml(trip.timestamp ? new Date(trip.timestamp).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }) : 'Unknown')}</p>
                     </div>
                 `;
                 container.appendChild(item);
